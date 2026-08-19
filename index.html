@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home Designer — Montana</title>
+<style>
+  html,body{margin:0;height:100%;background:#0d1117;color:#e6edf3;font-family:system-ui,sans-serif;overflow:hidden}
+  #wrap{display:flex;height:100%}
+  #left{width:340px;min-width:340px;overflow:auto;background:#141922;padding:10px;box-sizing:border-box}
+  #mid{flex:1;position:relative}
+  #plan{position:absolute;inset:0;width:100%;height:55%;background:#0f141c;display:block;border-bottom:2px solid #222;touch-action:none}
+  #view{position:absolute;left:0;top:55%;width:100%;height:45%;display:block;touch-action:none}
+  h2{margin:2px 0 8px;font-size:15px;color:#7ee787}
+  .sec{margin-top:12px;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#8b98a8;border-top:1px solid #232b36;padding-top:8px}
+  label{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:5px 0;font-size:13px}
+  input[type=range]{flex:1}
+  input[type=number]{width:66px;background:#0d1117;color:#e6edf3;border:1px solid #333;border-radius:5px;padding:3px}
+  select,button{background:#21262d;color:#e6edf3;border:1px solid #3a434f;border-radius:6px;padding:5px 8px;cursor:pointer;font-size:13px}
+  button.on{background:#2ea043;border-color:#2ea043;color:#fff}
+  button.wide{width:100%;margin-top:6px}
+  button.mini{padding:3px 7px;font-size:12px}
+  .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  #hint{position:absolute;top:8px;left:8px;background:rgba(13,17,23,.82);padding:6px 9px;border-radius:6px;font-size:12px;color:#9aa4af;pointer-events:none}
+  #paintHint{position:absolute;left:8px;bottom:8px;background:rgba(13,17,23,.82);padding:5px 9px;border-radius:6px;font-size:12px;color:#7ee787;pointer-events:none;display:none}
+  input[type=color]{width:34px;height:24px;border:none;background:none;padding:0}
+  textarea{width:100%;height:52px;background:#0d1117;color:#7ee787;border:1px solid #333;font:11px monospace;margin-top:6px;box-sizing:border-box}
+  .sw{width:30px;height:30px;border-radius:6px;border:2px solid #2b333d;cursor:pointer}
+  .sw.on{border-color:#7ee787;box-shadow:0 0 0 2px #2ea04355}
+  .swrow{display:flex;gap:7px;flex-wrap:wrap;margin-top:4px}
+  .tab{padding:4px 9px;border-radius:6px 6px 0 0;font-size:12px}
+  .tab.on{background:#2ea043;border-color:#2ea043;color:#fff}
+  small{color:#8b98a8;font-size:11px;line-height:1.35;display:block;margin-top:6px}
+  #fab{display:none;position:fixed;z-index:40;left:12px;top:12px;width:48px;height:48px;border-radius:50%;font-size:21px;background:#2ea043;color:#fff;border:none;box-shadow:0 2px 12px #0009;cursor:pointer;align-items:center;justify-content:center}
+  #closePanel{display:block;position:absolute;top:8px;right:8px;padding:2px 9px;font-size:15px}   /* always available to minimize */
+  body.collapsed #left{display:none}          /* collapsing hides the panel at ANY width */
+  body.collapsed #fab{display:flex}           /* …and reveals the reopen button */
+  #drawbar{display:none;position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:35;gap:7px;background:rgba(13,17,23,.92);padding:7px 9px;border-radius:10px;align-items:center;box-shadow:0 2px 12px #0009}
+  #drawbar.on{display:flex}
+  #drawbar b{color:#7ee787;font-size:12px;margin-right:2px}
+  #drawbar button[disabled]{opacity:.4}
+  #coord{display:none;position:absolute;top:8px;right:8px;z-index:35;background:rgba(13,17,23,.88);padding:5px 9px;border-radius:6px;font:12px ui-monospace,monospace;color:#cdd6e0;pointer-events:none}
+  #coord.on{display:block}
+  #walkToggle{position:absolute;right:8px;bottom:8px;z-index:36}
+  #walkpad{display:none;position:absolute;left:8px;bottom:8px;z-index:36;grid-template-columns:repeat(3,42px);grid-auto-rows:42px;gap:5px}
+  #walkpad button{font-size:18px;padding:0;background:rgba(33,38,45,.9)}
+  #walkpad .sp{visibility:hidden}
+  #walkHint{display:none;position:absolute;left:50%;bottom:56px;transform:translateX(-50%);z-index:36;background:rgba(13,17,23,.82);padding:4px 9px;border-radius:6px;font-size:11px;color:#9aa4af;pointer-events:none}
+  @media(max-width:760px){
+    #left{position:fixed;z-index:20;top:0;left:0;height:100%;width:86vw;max-width:340px;box-shadow:3px 0 20px #000a}
+    #mid{position:absolute;inset:0}
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="left">
+    <h2>🏠 Home Designer</h2>
+    <button id="closePanel">✕</button>
+
+    <div class="sec">floors</div>
+    <div class="row" id="floorTabs"></div>
+    <div class="row" style="margin-top:6px">
+      <button id="addFloor" class="mini">＋ floor</button>
+      <button id="delFloor" class="mini">🗑 floor</button>
+      <label style="margin-left:auto">height (ft) <input id="fh" type="number" min="7" max="30" step="0.5"></label>
+    </div>
+
+    <div class="sec">tool</div>
+    <div class="row">
+      <button id="mOutline">⬠ Outline</button>
+      <button id="mWall">│ Wall</button>
+      <button id="mWin">🪟 Window</button>
+      <button id="mDoor">🚪 Door</button>
+      <button id="mStair">🪜 Stairs</button>
+      <button id="mVoid">⬚ Open</button>
+      <button id="mSel" class="on">↖ Select</button>
+    </div>
+
+    <div class="sec">selected</div>
+    <div id="props"><small>Draw the outline (⬠) — click each corner, click the first dot to close. Drag corners to make L-shapes or bays. Draw walls (│) to split rooms; on the top floor a wall can be flipped to a dormer.</small></div>
+
+    <div class="sec">roof (whole house)</div>
+    <label>style <select id="roofStyle"><option value="gable">gable</option><option value="hip">hip</option><option value="shed">shed</option><option value="flat">flat</option></select></label>
+    <label>pitch <input id="roofPitch" type="range" min="0.15" max="1.1" step="0.05"></label>
+    <label>hide roof (look inside) <input id="noRoof" type="checkbox"></label>
+
+    <div class="sec">materials — pick a swatch, tap a wall face in 3D to paint it. Outer walls paint each side on its own (peek inside with "hide roof" to paint the interior).</div>
+    <div class="swrow" id="palette"></div>
+    <label style="margin-top:6px">edit swatch <input id="swEdit" type="color"></label>
+
+    <div class="sec">save</div>
+    <button id="save" class="wide">💾 Save to Scene</button>
+    <button id="copy" class="wide">📋 Copy JSON</button>
+    <button id="export" class="wide">⬇ Export .json file</button>
+    <button id="load" class="wide">↺ Load saved</button>
+    <textarea id="dump" readonly placeholder="exported JSON appears here"></textarea>
+    <small>Top grid = current floor's plan (floor below shown faint). Bottom = live 3D. <b>Save to Scene</b> puts it on your land — reload the main scene.</small>
+  </div>
+  <div id="mid">
+    <canvas id="plan"></canvas>
+    <canvas id="view"></canvas>
+    <div id="hint">⬠ tap each corner · drag dots to reshape · drag elsewhere to pan · scroll/pinch to zoom</div>
+    <div id="drawbar"><b id="drawcount">Tap corners…</b><button id="drawUndo" class="mini">↶ undo</button><button id="drawFinish" class="mini">✓ finish</button><button id="drawCancel" class="mini">✕</button></div>
+    <div id="paintHint">🎨 paint mode — tap a wall's outside or inside face</div>
+    <div id="coord"></div>
+    <button id="walkToggle">🚶 Walk</button>
+    <div id="walkHint">drag the 3D view to look around</div>
+    <div id="walkpad">
+      <button class="sp"></button><button data-mv="fwd">▲</button><button data-mv="up">⤒</button>
+      <button data-mv="left">◀</button><button data-mv="back">▼</button><button data-mv="right">▶</button>
+      <button class="sp"></button><button class="sp"></button><button data-mv="down">⤓</button>
+    </div>
+  </div>
+</div>
+<button id="fab" title="menu">☰</button>
+
+<script type="importmap">
+{ "imports": { "three": "./node_modules/three/build/three.module.js", "three/addons/": "./node_modules/three/examples/jsm/" }}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { buildHouse } from './house-model.js?v=6';
+
+// ---------- state ----------
+const DEF_PAL=['#6b5a45','#ffffff','#33363a','#8a6d4b','#aeb6bd','#241a12'];
+const rectOut=(x,z,w,d)=>[[x-w/2,z-d/2],[x+w/2,z-d/2],[x+w/2,z+d/2],[x-w/2,z+d/2]];
+// baked starting design (his copied layout) — used whenever nothing is saved yet
+const DEFAULT_SPEC='{"floors":[{"outline":[[-30,-15],[30,-15],[30,15],[7,15],[7,17],[4,20],[-4,20],[-7,17],[-7,15],[-30,15],[-30,11],[-41,11],[-41,0],[-30,0]],"h":10,"walls":[{"x0":-30,"z0":-4,"x1":-16,"z1":-4,"dormer":false},{"x0":-16,"z0":-4,"x1":-16,"z1":-15},{"x0":9.5,"z0":-15,"x1":9.5,"z1":-3.5},{"x0":9.5,"z0":-3.5,"x1":30,"z1":-3.5},{"x0":21.5,"z0":-3.5,"x1":21.5,"z1":-15}],"openings":[{"on":"wall","off":3.6672263565857293,"w":3,"y0":0,"y1":7,"type":"door","wi":1},{"on":"wall","off":6.215876363054048,"w":3,"y0":0,"y1":7,"type":"door","wi":2},{"on":"wall","off":15.651811861941809,"w":3,"y0":0,"y1":7,"type":"door","wi":3}],"mats":{"0":0},"matsIn":{}},{"outline":[[-30,-15],[30,-15],[30,15],[-30,15],[-30,11],[-30,0]],"h":7,"walls":[],"openings":[],"mats":{},"matsIn":{}}],"roof":{"style":"gable","pitch":0.5,"mat":null},"stairs":[{"x":1.5,"z":-12,"w":5,"run":15.5,"dir":"E","floor":0}],"palette":["#6b5a45","#ffffff","#33363a","#8a6d4b","#aeb6bd","#241a12"],"colors":{"wall":"#6b5a45","roof":"#33363a","trim":"#dad6c8"}}';
+function freshSpec(){ return migrate(JSON.parse(DEFAULT_SPEC)); }
+function migrate(s){
+  if(!s) return freshSpec();
+  s.palette=s.palette||DEF_PAL.slice(); s.stairs=s.stairs||[]; s.colors=s.colors||{wall:'#6b5a45',roof:'#33363a',trim:'#dad6c8'}; s.roof=s.roof||{style:'gable',pitch:0.5};
+  if(s.blocks&&s.blocks.length&&!s.floors){ const b=s.blocks[0];
+    s.floors=[{outline:rectOut(b.x,b.z,b.w,b.d),h:b.h||6,walls:[],openings:[],mats:{}}]; s.roof={style:b.roof||'gable',pitch:b.pitch??0.5}; }
+  if(!s.floors) return freshSpec();
+  s.floors.forEach(f=>{ if(!f.outline){ if(f.shell){ const sh=f.shell; f.outline=rectOut(sh.x,sh.z,sh.w,sh.d);
+        const map={S:0,E:1,N:2,W:3}; if(f.mats){ const nm={}; for(const k in f.mats){ nm[map[k]!=null?map[k]:k]=f.mats[k]; } f.mats=nm; }
+        (f.openings||[]).forEach(o=>{ if(o.on==='shell'){ o.on='outline'; o.edge=map[o.side]; delete o.side; } }); }
+      else f.outline=rectOut(0,0,60,30); }
+    f.walls=f.walls||[]; f.openings=f.openings||[]; f.mats=f.mats||{}; f.matsIn=f.matsIn||{}; f.voids=f.voids||[]; f.h=f.h||10; delete f.shell; });
+  return s;
+}
+const KEY_SCENE='montanaHouse', KEY_DRAFT='montanaHouseDraft';   // draft = designer's working copy; scene = committed house
+let spec = migrate(JSON.parse(localStorage.getItem(KEY_DRAFT)||localStorage.getItem(KEY_SCENE)||'null'));
+let cur = 0, mode = 'sel';
+let sel = null;          // {kind:'vertex'|'outline'|'wall'|'opening'|'stair', idx?}
+let activeMat = null;
+let poly = null;         // in-progress outline vertices while drawing
+let hoverPt = null;
+const F = ()=>spec.floors[cur];
+const isTopFloor = ()=> cur===spec.floors.length-1;
+const $=id=>document.getElementById(id);   // defined up here so walk-mode code below (loaded earlier in the script) can use it
+
+// ---------- geometry helpers (world metres) ----------
+const snap=v=>Math.round(v*2)/2;
+function proj(px,pz, a,b){ const dx=b[0]-a[0],dz=b[1]-a[1], L2=dx*dx+dz*dz;
+  let t=L2?((px-a[0])*dx+(pz-a[1])*dz)/L2:0; t=Math.max(0,Math.min(1,t));
+  const cx=a[0]+dx*t, cz=a[1]+dz*t; return {t,off:t*Math.sqrt(L2),len:Math.sqrt(L2),dist:Math.hypot(px-cx,pz-cz)}; }
+function edgesOf(f){ const o=f.outline, r=[]; for(let e=0;e<o.length;e++) r.push({on:'outline',edge:e,a:o[e],b:o[(e+1)%o.length]});
+  f.walls.forEach((w,wi)=>r.push({on:'wall',wi,a:[w.x0,w.z0],b:[w.x1,w.z1]})); return r; }
+function nearestWall(px,pz){ let best=null; edgesOf(F()).forEach(sg=>{const p=proj(px,pz,sg.a,sg.b);
+  if(!best||p.dist<best.dist) best={on:sg.on,edge:sg.edge,wi:sg.wi,off:p.off,len:p.len,dist:p.dist};}); return best; }
+function openingSeg(f,o){ if(o.on==='outline'){ const a=f.outline[o.edge], b=f.outline[(o.edge+1)%f.outline.length]; return [a,b]; }
+  const w=f.walls[o.wi]; return [[w.x0,w.z0],[w.x1,w.z1]]; }
+function openLen(f,o){ const [a,b]=openingSeg(f,o); return Math.hypot(b[0]-a[0],b[1]-a[1]); }
+function stairRect(st){ const horiz=(st.dir==='E'||st.dir==='W'), run=st.run||3, w=st.w||1.2; return {x:st.x,z:st.z,w:horiz?run:w,d:horiz?w:run}; }
+function inPoly(px,pz,o){ let c=false; for(let i=0,j=o.length-1;i<o.length;j=i++){ const xi=o[i][0],zi=o[i][1],xj=o[j][0],zj=o[j][1];
+  if(((zi>pz)!=(zj>pz)) && (px<(xj-xi)*(pz-zi)/(zj-zi)+xi)) c=!c; } return c; }
+// keep outline openings glued to their world spot across vertex insert/delete
+function outlineCenters(f){ return f.openings.map(o=>{ if(o.on!=='outline')return null; const [a,b]=openingSeg(f,o);
+  const L=Math.hypot(b[0]-a[0],b[1]-a[1])||1, t=(o.off+o.w/2)/L; return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t]; }); }
+function reanchor(f,centers){ f.openings.forEach((o,i)=>{ if(o.on!=='outline'||!centers[i])return; const c=centers[i]; let best=null;
+  for(let e=0;e<f.outline.length;e++){ const a=f.outline[e],b=f.outline[(e+1)%f.outline.length]; const p=proj(c[0],c[1],a,b); if(!best||p.dist<best.dist) best={e,off:p.off}; }
+  o.edge=best.e; o.off=Math.max(0,best.off-o.w/2); }); }
+
+// ---------- 2D plan editor ----------
+const plan=document.getElementById('plan'), pc=plan.getContext('2d');
+let PPM=6, camX=0, camZ=0;   // pixels per foot (units = feet)
+function planResize(){plan.width=plan.clientWidth;plan.height=plan.clientHeight;draw2d();}
+addEventListener('resize',planResize);
+const toS=(x,z)=>[plan.width/2+(x-camX)*PPM, plan.height/2+(z-camZ)*PPM];
+const toW=(px,pz)=>[(px-plan.width/2)/PPM+camX, (pz-plan.height/2)/PPM+camZ];
+function line(a,b,col,wd){const A=toS(a[0],a[1]),B=toS(b[0],b[1]);pc.strokeStyle=col;pc.lineWidth=wd;pc.beginPath();pc.moveTo(A[0],A[1]);pc.lineTo(B[0],B[1]);pc.stroke();}
+function dot(p,col,r){const A=toS(p[0],p[1]);pc.fillStyle=col;pc.beginPath();pc.arc(A[0],A[1],r||5,0,7);pc.fill();pc.strokeStyle='#0d1117';pc.lineWidth=1.5;pc.stroke();}
+function polyOutline(o,col,wd){ for(let i=0;i<o.length;i++) line(o[i],o[(i+1)%o.length],col,wd); }
+function draw2d(){
+  pc.fillStyle='#0f141c'; pc.fillRect(0,0,plan.width,plan.height);
+  pc.strokeStyle='#182130'; pc.lineWidth=1; const step=PPM;
+  for(let gx=(plan.width/2-camX*PPM)%step; gx<plan.width; gx+=step){pc.beginPath();pc.moveTo(gx,0);pc.lineTo(gx,plan.height);pc.stroke();}
+  for(let gz=(plan.height/2-camZ*PPM)%step; gz<plan.height; gz+=step){pc.beginPath();pc.moveTo(0,gz);pc.lineTo(plan.width,gz);pc.stroke();}
+  const [ox,oz]=toS(0,0); pc.strokeStyle='#243444'; pc.beginPath();pc.moveTo(ox,0);pc.lineTo(ox,plan.height);pc.moveTo(0,oz);pc.lineTo(plan.width,oz);pc.stroke();
+  if(cur>0){ const g=spec.floors[cur-1]; polyOutline(g.outline,'#2b3a49',1); g.walls.forEach(w=>line([w.x0,w.z0],[w.x1,w.z1],'#2b3a49',1)); }
+  const f=F();
+  if(poly){ polyOutline(f.outline, '#33404d', 1); }   // drawing a new footprint — show the old one faintly
+  else { polyOutline(f.outline, sel&&sel.kind==='outline'?'#7ee787':'#8fa3b8', sel&&sel.kind==='outline'?3:2);
+    f.outline.forEach((p,i)=> dot(p, sel&&sel.kind==='vertex'&&sel.idx===i?'#7ee787':'#c9d3de', 4)); }
+  // floor cutouts (open-to-below) — dashed cyan, draggable corner dots
+  (f.voids||[]).forEach((v,vi)=>{ const onV = sel&&((sel.kind==='void'&&sel.idx===vi)||(sel.kind==='voidvtx'&&sel.vi===vi));
+    pc.setLineDash([6,4]); for(let i=0;i<v.length;i++) line(v[i], v[(i+1)%v.length], onV?'#7ee787':'#57c7ff', onV?3:2); pc.setLineDash([]);
+    let sx=0,sz=0; v.forEach(p=>{sx+=p[0];sz+=p[1];}); const cc=toS(sx/v.length,sz/v.length);
+    pc.fillStyle=onV?'#7ee787':'#57c7ff'; pc.font='10px system-ui'; pc.fillText('open to below', cc[0]-32, cc[1]+3);
+    v.forEach((p,pi)=> dot(p, (sel&&sel.kind==='voidvtx'&&sel.vi===vi&&sel.pi===pi)?'#ffd76a':(onV?'#7ee787':'#57c7ff'), 4)); });
+  // interior walls (orange = flagged as a dormer)
+  f.walls.forEach((w,wi)=>{ const on=sel&&sel.kind==='wall'&&sel.idx===wi;
+    line([w.x0,w.z0],[w.x1,w.z1], on?'#7ee787':(w.dormer?'#d98f5b':'#c9d3de'), on?4:3);
+    if(on){ dot([w.x0,w.z0],'#7ee787',6); dot([w.x1,w.z1],'#7ee787',6); } });   // end-dots on selected wall
+  // openings
+  f.openings.forEach((o,oi)=>{ const [a,b]=openingSeg(f,o); const dx=b[0]-a[0],dz=b[1]-a[1],L=Math.hypot(dx,dz)||1,ux=dx/L,uz=dz/L;
+    const p0=[a[0]+ux*o.off,a[1]+uz*o.off], p1=[a[0]+ux*(o.off+o.w),a[1]+uz*(o.off+o.w)];
+    line(p0,p1, o.type==='door'?'#c98a4b':'#57c7ff', sel&&sel.kind==='opening'&&sel.idx===oi?7:5); });
+  // stairs on this floor
+  f_stairs().forEach(st=>{ const r=stairRect(st), on=sel&&sel.kind==='stair'&&sel.idx===st.__i, A=toS(r.x-r.w/2,r.z-r.d/2);
+    pc.strokeStyle=on?'#7ee787':'#e3b341'; pc.lineWidth=on?3:2; pc.strokeRect(A[0],A[1],r.w*PPM,r.d*PPM);
+    const horiz=(st.dir==='E'||st.dir==='W'); pc.beginPath();
+    for(let i=1;i<6;i++){ const t=i/6; if(horiz){const X=A[0]+r.w*PPM*t;pc.moveTo(X,A[1]);pc.lineTo(X,A[1]+r.d*PPM);}else{const Y=A[1]+r.d*PPM*t;pc.moveTo(A[0],Y);pc.lineTo(A[0]+r.w*PPM,Y);} }
+    pc.stroke(); const c=toS(st.x,st.z); pc.fillStyle=on?'#7ee787':'#e3b341'; pc.font='bold 13px system-ui'; pc.fillText('▲',c[0]-6,c[1]+5); });
+  // stairwell coming up from floor below
+  if(cur>0){ spec.stairs.filter(s=>(s.floor||0)===cur-1).forEach(st=>{ const r=stairRect(st), A=toS(r.x-r.w/2,r.z-r.d/2);
+    pc.strokeStyle='#6f7f4a'; pc.setLineDash([5,4]); pc.lineWidth=2; pc.strokeRect(A[0],A[1],r.w*PPM,r.d*PPM); pc.setLineDash([]);
+    const c=toS(st.x,st.z); pc.fillStyle='#93a35d'; pc.font='11px system-ui'; pc.fillText('▼ stairwell',c[0]-26,c[1]+4); }); }
+  // in-progress outline
+  if(poly&&poly.length){ pc.strokeStyle='#7ee787'; pc.lineWidth=2;
+    for(let i=0;i<poly.length-1;i++) line(poly[i],poly[i+1],'#7ee787',2);
+    if(hoverPt) line(poly[poly.length-1],hoverPt,'#7ee78788',2);
+    poly.forEach((p,i)=>dot(p, i===0?'#ffd76a':'#7ee787',5)); }
+  if(drag&&drag.mode==='newWall') line([drag.x0,drag.z0],[drag.x1,drag.z1],'#7ee787',3);
+  pc.fillStyle='#ff7b72';pc.font='bold 12px system-ui';pc.fillText('N ↑',ox-9,14);
+  pc.fillStyle='#8b98a8';pc.font='11px system-ui';pc.fillText('Floor '+(cur+1)+(isTopFloor()?' (top)':''),8,plan.height-8);
+}
+function f_stairs(){ return spec.stairs.map((s,i)=>({...s,__i:i})).filter(s=>(s.floor||0)===cur); }
+function showCoord(x,z){ const c=$('coord'); c.textContent='E '+x.toFixed(1)+'   N '+(-z).toFixed(1)+' ft'; c.classList.add('on'); }
+function hideCoord(){ $('coord').classList.remove('on'); }
+// [x,z] of whatever's selected (for the readout + arrow-key nudge), or null
+function coordForSel(){ const f=F(); if(!sel) return null;
+  if(sel.kind==='vertex') return f.outline[sel.idx].slice();
+  if(sel.kind==='voidvtx') return f.voids[sel.vi][sel.pi].slice();
+  if(sel.kind==='stair'){ const s=spec.stairs[sel.idx]; return [s.x,s.z]; }
+  if(sel.kind==='wall'){ const w=f.walls[sel.idx]; return [(w.x0+w.x1)/2,(w.z0+w.z1)/2]; }
+  return null; }
+// show the selected point's position persistently (not just while dragging)
+function refreshCoord(){ const p=coordForSel(); if(p) showCoord(p[0],p[1]); else hideCoord(); }
+// arrow keys nudge the selected point/wall/stair/footprint by dx,dz feet
+function nudgeSel(dx,dz){ const f=F(); if(!sel) return false;
+  if(sel.kind==='vertex'){ const p=f.outline[sel.idx]; p[0]=snap(p[0]+dx); p[1]=snap(p[1]+dz); }
+  else if(sel.kind==='voidvtx'){ const p=f.voids[sel.vi][sel.pi]; p[0]=snap(p[0]+dx); p[1]=snap(p[1]+dz); }
+  else if(sel.kind==='void'){ f.voids[sel.idx]=f.voids[sel.idx].map(p=>[snap(p[0]+dx),snap(p[1]+dz)]); }
+  else if(sel.kind==='wall'){ const w=f.walls[sel.idx]; w.x0=snap(w.x0+dx); w.z0=snap(w.z0+dz); w.x1=snap(w.x1+dx); w.z1=snap(w.z1+dz); }
+  else if(sel.kind==='stair'){ const s=spec.stairs[sel.idx]; s.x=snap(s.x+dx); s.z=snap(s.z+dz); }
+  else if(sel.kind==='outline'){ f.outline=f.outline.map(p=>[snap(p[0]+dx),snap(p[1]+dz)]); }
+  else return false;
+  rebuild(); refreshCoord(); return true; }
+// insert a corner at the midpoint of the edge after vertex e (keeps openings glued)
+function insertCornerAfter(e){ const f=F(); const a=f.outline[e], b=f.outline[(e+1)%f.outline.length];
+  const mid=[snap((a[0]+b[0])/2),snap((a[1]+b[1])/2)]; const c=outlineCenters(f);
+  f.outline.splice(e+1,0,mid); reanchor(f,c); sel={kind:'vertex',idx:e+1}; rebuild(); }
+function addCornerLongest(){ const f=F(); let bi=0,bl=-1;
+  for(let e=0;e<f.outline.length;e++){ const a=f.outline[e],b=f.outline[(e+1)%f.outline.length]; const L=Math.hypot(b[0]-a[0],b[1]-a[1]); if(L>bl){bl=L;bi=e;} }
+  insertCornerAfter(bi); }
+// split a cutout's longest edge, then select the new corner
+function insertVoidCorner(vi,pi){ const v=F().voids[vi]; const a=v[pi], b=v[(pi+1)%v.length];
+  v.splice(pi+1,0,[snap((a[0]+b[0])/2),snap((a[1]+b[1])/2)]); sel={kind:'voidvtx',vi,pi:pi+1}; rebuild(); }
+function addVoidCornerLongest(vi){ const v=F().voids[vi]; let bi=0,bl=-1;
+  for(let i=0;i<v.length;i++){ const a=v[i],b=v[(i+1)%v.length],L=Math.hypot(b[0]-a[0],b[1]-a[1]); if(L>bl){bl=L;bi=i;} }
+  insertVoidCorner(vi,bi); }
+
+let drag=null, down=null;
+const pointers=new Map(); let gesture=null;                       // multi-touch pinch/pan
+const cxy=e=>{ const r=plan.getBoundingClientRect(); return [e.clientX-r.left, e.clientY-r.top]; };
+function startGesture(){ const p=[...pointers.values()], mid=[(p[0][0]+p[1][0])/2,(p[0][1]+p[1][1])/2];
+  gesture={dist:Math.hypot(p[0][0]-p[1][0],p[0][1]-p[1][1])||1, ppm:PPM, world:toW(mid[0],mid[1])}; drag=null; down=null; }
+function moveGesture(){ const p=[...pointers.values()]; if(p.length<2) return;
+  const mid=[(p[0][0]+p[1][0])/2,(p[0][1]+p[1][1])/2], d=Math.hypot(p[0][0]-p[1][0],p[0][1]-p[1][1])||1;
+  PPM=Math.max(1.5,Math.min(30, gesture.ppm*(d/gesture.dist)));      // pinch = zoom, keep the focal world point under the fingers
+  camX=gesture.world[0]-(mid[0]-plan.width/2)/PPM; camZ=gesture.world[1]-(mid[1]-plan.height/2)/PPM; draw2d(); }
+function handleTap(wx,wz){                                          // tap-to-place (so a 2-finger pan never places by accident)
+  if(isPolyMode(mode)){ if(!poly) poly=[];
+    if(poly.length>=3 && Math.hypot(wx-poly[0][0],wz-poly[0][1])<1.4){ finishPoly(); return; }
+    poly.push([snap(wx),snap(wz)]); updateDrawbar(); draw2d(); return; }
+  if(mode==='win'||mode==='door'){ const nw=nearestWall(wx,wz); if(nw&&nw.dist<1.6) addOpening(nw, mode==='door'?'door':'window'); return; }
+  if(mode==='stair'){ spec.stairs.push({x:snap(wx),z:snap(wz),w:3,run:10,dir:'N',floor:cur}); sel={kind:'stair',idx:spec.stairs.length-1}; rebuild(); return; }
+}
+plan.addEventListener('contextmenu',e=>e.preventDefault());
+plan.addEventListener('pointerdown',e=>{
+  pointers.set(e.pointerId, cxy(e));
+  if(pointers.size>=2){ startGesture(); return; }                  // second finger -> pinch/pan
+  if(e.pointerType==='mouse' && (e.button===1||e.button===2)){ drag={mode:'pan',sx:e.clientX,sy:e.clientY,cx:camX,cz:camZ}; e.preventDefault(); return; }
+  const r=plan.getBoundingClientRect(), [wx,wz]=toW(e.clientX-r.left,e.clientY-r.top), f=F();
+  down={id:e.pointerId, sx:e.clientX, sy:e.clientY, wx, wz, moved:false};
+  if(mode==='wall'){ drag={mode:'newWall',x0:snap(wx),z0:snap(wz),x1:snap(wx),z1:snap(wz)}; draw2d(); return; }
+  if(mode==='sel'){
+    // grab a footprint corner dot
+    for(let i=0;i<f.outline.length;i++){ if(Math.hypot(wx-f.outline[i][0],wz-f.outline[i][1])<0.8){ sel={kind:'vertex',idx:i}; drag={mode:'vtx',i}; draw2d(); syncProps(); return; } }
+    // grab a floor-cutout corner dot
+    for(let vi=0;vi<(f.voids||[]).length;vi++){ const v=f.voids[vi];
+      for(let pi=0;pi<v.length;pi++){ if(Math.hypot(wx-v[pi][0],wz-v[pi][1])<0.8){ sel={kind:'voidvtx',vi,pi}; drag={mode:'voidpt',vi,pi}; draw2d(); syncProps(); return; } } }
+    // grab a selected wall's end dot
+    if(sel&&sel.kind==='wall'){ const w=f.walls[sel.idx];
+      if(Math.hypot(wx-w.x0,wz-w.z0)<0.8){ drag={mode:'wend',end:0}; return; }
+      if(Math.hypot(wx-w.x1,wz-w.z1)<0.8){ drag={mode:'wend',end:1}; return; } }
+    // grab a stair icon to reposition it
+    for(const st of f_stairs()){ const r=stairRect(st); if(Math.abs(wx-r.x)<=r.w/2&&Math.abs(wz-r.z)<=r.d/2){
+      sel={kind:'stair',idx:st.__i}; drag={mode:'moveStair',ox:wx-spec.stairs[st.__i].x,oz:wz-spec.stairs[st.__i].z}; draw2d(); syncProps(); return; } }
+    // otherwise: one-finger drag pans the view; a tap (no drag) selects what's under the finger
+    drag={mode:'pan',sx:e.clientX,sy:e.clientY,cx:camX,cz:camZ};
+    return;
+  }
+  draw2d();                                                        // outline/win/door/stair act on tap (pointerup)
+});
+plan.addEventListener('pointermove',e=>{
+  if(pointers.has(e.pointerId)) pointers.set(e.pointerId, cxy(e));
+  if(gesture){ moveGesture(); return; }
+  const r=plan.getBoundingClientRect(), [wx,wz]=toW(e.clientX-r.left,e.clientY-r.top);
+  if(down && !down.moved && Math.hypot(e.clientX-down.sx,e.clientY-down.sy)>6) down.moved=true;
+  if(drag&&drag.mode==='pan'){ camX=drag.cx-(e.clientX-drag.sx)/PPM; camZ=drag.cz-(e.clientY-drag.sy)/PPM; draw2d(); return; }
+  if(isPolyMode(mode)&&poly&&poly.length){ hoverPt=[wx,wz]; showCoord(snap(wx),snap(wz)); draw2d(); return; }
+  if(!drag) return; const f=F();
+  if(drag.mode==='newWall'){ drag.x1=snap(wx); drag.z1=snap(wz); showCoord(drag.x1,drag.z1); }
+  else if(drag.mode==='vtx'){ f.outline[drag.i]=[snap(wx),snap(wz)]; showCoord(snap(wx),snap(wz)); rebuild(); }
+  else if(drag.mode==='wend'){ const w=f.walls[sel.idx]; if(drag.end===0){w.x0=snap(wx);w.z0=snap(wz);}else{w.x1=snap(wx);w.z1=snap(wz);} showCoord(snap(wx),snap(wz)); rebuild(); }
+  else if(drag.mode==='voidpt'){ f.voids[drag.vi][drag.pi]=[snap(wx),snap(wz)]; showCoord(snap(wx),snap(wz)); rebuild(); }
+  else if(drag.mode==='moveStair'){ const s=spec.stairs[sel.idx]; s.x=snap(wx-drag.ox); s.z=snap(wz-drag.oz); showCoord(s.x,s.z); rebuild(); }
+  draw2d();
+});
+function endPointer(e){
+  pointers.delete(e.pointerId);
+  if(gesture){ if(pointers.size<2) gesture=null; drag=null; down=null; refreshCoord(); return; }
+  if(drag&&drag.mode==='pan'){ const tap=down&&e.pointerId===down.id&&!down.moved; drag=null;
+    if(tap){ pickAt(down.wx,down.wz); }             // didn't actually pan -> treat as a tap to select
+    down=null; hideCoord(); draw2d(); syncProps(); return; }
+  if(drag&&drag.mode==='newWall'){ const L=Math.hypot(drag.x1-drag.x0,drag.z1-drag.z0);
+    if(L>=1){ F().walls.push({x0:drag.x0,z0:drag.z0,x1:drag.x1,z1:drag.z1}); sel={kind:'wall',idx:F().walls.length-1}; rebuild(); } }
+  else if(down && e.pointerId===down.id && !down.moved){ handleTap(down.wx,down.wz); }
+  drag=null; down=null; hideCoord(); draw2d(); syncProps();
+}
+plan.addEventListener('pointerup',endPointer);
+plan.addEventListener('pointercancel',endPointer);
+plan.addEventListener('dblclick',e=>{ if(mode!=='sel') return; const r=plan.getBoundingClientRect(), [wx,wz]=toW(e.clientX-r.left,e.clientY-r.top), f=F();
+  let best=null; for(let e2=0;e2<f.outline.length;e2++){ const a=f.outline[e2],b=f.outline[(e2+1)%f.outline.length]; const p=proj(wx,wz,a,b); if(!best||p.dist<best.dist) best={e:e2,dist:p.dist}; }
+  if(best&&best.dist<0.9){ const centers=outlineCenters(f); f.outline.splice(best.e+1,0,[snap(wx),snap(wz)]); reanchor(f,centers); sel={kind:'vertex',idx:best.e+1}; rebuild(); } });
+plan.addEventListener('wheel',e=>{e.preventDefault();PPM=Math.max(1.5,Math.min(30,PPM*(e.deltaY<0?1.1:0.9)));draw2d();},{passive:false});
+
+function addOpening(nw,type){ const w=type==='door'?3:3.5, off=Math.max(0,Math.min(nw.len-w, nw.off-w/2));
+  const o={on:nw.on, off, w, y0:type==='door'?0:3, y1:type==='door'?7:6.5, type};
+  if(nw.on==='outline') o.edge=nw.edge; else o.wi=nw.wi;
+  F().openings.push(o); sel={kind:'opening',idx:F().openings.length-1}; rebuild(); }
+function pickAt(wx,wz){ const f=F();
+  for(let i=f.openings.length-1;i>=0;i--){ const o=f.openings[i]; const [a,b]=openingSeg(f,o); const p=proj(wx,wz,a,b);
+    if(p.dist<0.9 && p.off>=o.off-0.3 && p.off<=o.off+o.w+0.3){ sel={kind:'opening',idx:i}; return; } }
+  for(const st of f_stairs()){ const r=stairRect(st); if(Math.abs(wx-r.x)<=r.w/2&&Math.abs(wz-r.z)<=r.d/2){ sel={kind:'stair',idx:st.__i}; return; } }
+  for(let i=f.walls.length-1;i>=0;i--){ const w=f.walls[i]; if(proj(wx,wz,[w.x0,w.z0],[w.x1,w.z1]).dist<0.7){ sel={kind:'wall',idx:i}; return; } }
+  for(let vi=(f.voids||[]).length-1;vi>=0;vi--){ if(inPoly(wx,wz,f.voids[vi])){ sel={kind:'void',idx:vi}; return; } }
+  if(inPoly(wx,wz,f.outline)){ sel={kind:'outline'}; return; }
+  sel=null;
+}
+
+// ---------- 3D preview ----------
+const view=document.getElementById('view');
+const renderer=new THREE.WebGLRenderer({canvas:view,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.outputEncoding=THREE.sRGBEncoding;
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x9fb8d0);
+const cam=new THREE.PerspectiveCamera(50,1,0.1,3000); cam.position.set(24,20,28);
+const ctr=new OrbitControls(cam,view); ctr.enableDamping=true; ctr.target.set(0,4,0);
+scene.add(new THREE.HemisphereLight(0xbcd4ff,0x30302a,0.75));
+const sun=new THREE.DirectionalLight(0xfff2d8,1.3); sun.position.set(-1,1.4,0.7); scene.add(sun);
+scene.add(new THREE.GridHelper(140,140,0x334155,0x1c2732));
+let houseGroup=null;
+let persistT=null;
+function persist(){ clearTimeout(persistT); persistT=setTimeout(()=>{ try{ localStorage.setItem(KEY_DRAFT, JSON.stringify(cleanSpec())); }catch(e){} }, 250); }
+function rebuild(){ if(houseGroup) scene.remove(houseGroup);
+  houseGroup=buildHouse(THREE, spec, {noRoof:$('noRoof').checked}); scene.add(houseGroup); draw2d(); syncProps(); persist(); }
+function resize(){const w=view.clientWidth,h=view.clientHeight;renderer.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix();}
+
+// ---- first-person walk-through ----
+let walk=false, yaw=Math.PI, pitch=0, lookLast=null; const mv={fwd:0,back:0,left:0,right:0,up:0,down:0};
+function setWalk(on){ walk=on; ctr.enabled=!on;
+  $('walkpad').style.display=on?'grid':'none'; $('walkHint').style.display=on?'block':'none';
+  $('walkToggle').classList.toggle('on',on); $('walkToggle').textContent=on?'🎥 Orbit':'🚶 Walk';
+  if(on){ cam.position.set(0,1.65,12); yaw=Math.PI; pitch=0; } else { ctr.target.set(0,4,0); } }
+$('walkToggle').onclick=()=>setWalk(!walk);
+document.querySelectorAll('#walkpad button[data-mv]').forEach(b=>{ const m=b.dataset.mv;
+  const on=e=>{e.preventDefault();mv[m]=1;}, off=e=>{e.preventDefault();mv[m]=0;};
+  b.addEventListener('pointerdown',on); b.addEventListener('pointerup',off); b.addEventListener('pointerleave',off); b.addEventListener('pointercancel',off); });
+function stepWalk(){ const sp=0.12, cy=Math.cos(yaw), sy=Math.sin(yaw);
+  if(mv.fwd){cam.position.x+=sy*sp;cam.position.z+=cy*sp;} if(mv.back){cam.position.x-=sy*sp;cam.position.z-=cy*sp;}
+  if(mv.right){cam.position.x-=cy*sp;cam.position.z+=sy*sp;} if(mv.left){cam.position.x+=cy*sp;cam.position.z-=sy*sp;}
+  if(mv.up){cam.position.y+=sp;} if(mv.down){cam.position.y=Math.max(0.3,cam.position.y-sp);}
+  const cp=Math.cos(pitch); cam.lookAt(cam.position.x+sy*cp, cam.position.y+Math.sin(pitch), cam.position.z+cy*cp); }
+(function loop(){requestAnimationFrame(loop); if(walk) stepWalk(); else ctr.update(); renderer.render(scene,cam);})();
+
+const ray=new THREE.Raycaster(), ndc=new THREE.Vector2(); let downXY=null;
+view.addEventListener('pointerdown',e=>{ downXY=[e.clientX,e.clientY]; if(walk) lookLast=[e.clientX,e.clientY]; });
+view.addEventListener('pointermove',e=>{ if(walk&&lookLast){ yaw-=(e.clientX-lookLast[0])*0.005; pitch=Math.max(-1.3,Math.min(1.3, pitch-(e.clientY-lookLast[1])*0.005)); lookLast=[e.clientX,e.clientY]; } });
+view.addEventListener('pointerup',e=>{
+  lookLast=null;
+  if(walk){ downXY=null; return; }                          // no painting while walking
+  if(!downXY) return; const moved=Math.hypot(e.clientX-downXY[0],e.clientY-downXY[1]); downXY=null;
+  if(moved>5 || activeMat==null || !houseGroup) return;
+  const r=view.getBoundingClientRect(); ndc.set(((e.clientX-r.left)/r.width)*2-1, -((e.clientY-r.top)/r.height)*2+1);
+  ray.setFromCamera(ndc,cam); const hit=ray.intersectObjects(houseGroup.children,true)[0]; if(!hit) return;
+  const mIdx = hit.face ? hit.face.materialIndex : 0;           // which box face was tapped (4=+z, 5=-z are the broad faces)
+  let o=hit.object, surf=null; while(o){ if(o.userData&&o.userData.surf){surf=o.userData.surf;break;} o=o.parent; }
+  if(!surf) return;
+  const otherSide = surf.outFace!=null && (mIdx===4||mIdx===5) && mIdx!==surf.outFace;   // tapped the wall's far skin
+  if(surf.kind==='outline'){ const f=spec.floors[surf.floor];
+    if(otherSide){ f.matsIn=f.matsIn||{}; f.matsIn[surf.edge]=activeMat; }
+    else { f.mats=f.mats||{}; f.mats[surf.edge]=activeMat; } }
+  else if(surf.kind==='wall'){ const w=spec.floors[surf.floor].walls[surf.wi];
+    if(otherSide) w.matIn=activeMat; else w.mat=activeMat; }
+  else if(surf.kind==='roof'){ spec.roof.mat=activeMat; }
+  rebuild();
+});
+
+// ---------- left-panel controls ----------
+const isMobile=()=>matchMedia('(pointer:coarse)').matches||matchMedia('(max-width:760px)').matches;
+const collapse=()=>document.body.classList.add('collapsed');
+const TOOLICON={outline:'⬠',wall:'│',win:'🪟',door:'🚪',stair:'🪜',void:'⬚',sel:'↖'};
+const isPolyMode=m=> m==='outline'||m==='void';
+$('fab').onclick=()=>document.body.classList.toggle('collapsed');
+$('closePanel').onclick=collapse;
+function setMode(m){ mode=m; poly = isPolyMode(m) ? [] : null; hoverPt=null;   // Outline / Open begin a fresh polygon
+  for(const [id,mm] of [['mOutline','outline'],['mWall','wall'],['mWin','win'],['mDoor','door'],['mStair','stair'],['mVoid','void'],['mSel','sel']]) $(id).classList.toggle('on', mm===m);
+  $('fab').textContent = TOOLICON[m]||'☰'; if(isMobile()) collapse();
+  $('paintHint').style.display = activeMat!=null ? 'block':'none'; updateDrawbar(); draw2d(); }
+function updateDrawbar(){ const on=(isPolyMode(mode)&&poly); $('drawbar').classList.toggle('on',!!on);
+  if(on){ const n=poly.length, what=mode==='void'?'the opening':'each corner'; $('drawcount').textContent = n?(n+' corner'+(n===1?'':'s')+(n>=3?'':' — need 3+')):('Tap '+what+'…'); $('drawFinish').disabled=n<3; } }
+function finishPoly(){ if(poly&&poly.length>=3){
+    if(mode==='void'){ F().voids=F().voids||[]; F().voids.push(poly.slice()); sel={kind:'void',idx:F().voids.length-1}; }
+    else { F().outline=poly.slice(); sel={kind:'outline'}; } }
+  poly=null; hoverPt=null; setMode('sel'); rebuild(); }
+function cancelPoly(){ poly=null; hoverPt=null; setMode('sel'); }
+$('drawFinish').onclick=finishPoly; $('drawCancel').onclick=cancelPoly;
+$('drawUndo').onclick=()=>{ if(poly&&poly.length){ poly.pop(); updateDrawbar(); draw2d(); } };
+$('mOutline').onclick=()=>setMode('outline'); $('mWall').onclick=()=>setMode('wall'); $('mWin').onclick=()=>setMode('win');
+$('mDoor').onclick=()=>setMode('door'); $('mStair').onclick=()=>setMode('stair'); $('mVoid').onclick=()=>setMode('void'); $('mSel').onclick=()=>setMode('sel');
+
+function renderTabs(){ const el=$('floorTabs'); el.innerHTML='';
+  spec.floors.forEach((f,i)=>{ const b=document.createElement('button'); b.className='tab'+(i===cur?' on':''); b.textContent='F'+(i+1);
+    b.onclick=()=>{cur=i; sel=null; poly=null; $('fh').value=F().h; draw2d(); syncProps(); renderTabs();}; el.appendChild(b); }); }
+$('addFloor').onclick=()=>{ const below=F(); spec.floors.splice(cur+1,0,{outline:below.outline.map(p=>p.slice()),h:10,walls:[],openings:[],mats:{}});
+  cur++; sel=null; $('fh').value=10; renderTabs(); rebuild(); };
+$('delFloor').onclick=()=>{ if(spec.floors.length<=1) return; spec.floors.splice(cur,1);
+  spec.stairs=spec.stairs.filter(s=>(s.floor||0)!==cur).map(s=>({...s,floor:(s.floor||0)>cur?s.floor-1:s.floor}));
+  cur=Math.max(0,cur-1); sel=null; $('fh').value=F().h; renderTabs(); rebuild(); };
+$('fh').oninput=e=>{ F().h=Math.max(7,+e.target.value||10); rebuild(); };
+$('roofStyle').onchange=e=>{ spec.roof.style=e.target.value; rebuild(); };
+$('roofPitch').oninput=e=>{ spec.roof.pitch=+e.target.value; rebuild(); };
+$('noRoof').onchange=rebuild;
+
+function renderPalette(){ const el=$('palette'); el.innerHTML='';
+  spec.palette.forEach((c,i)=>{ const d=document.createElement('div'); d.className='sw'+(i===activeMat?' on':''); d.style.background=c;
+    d.onclick=()=>{ activeMat=(activeMat===i?null:i); $('swEdit').value=spec.palette[i]; renderPalette(); $('paintHint').style.display=activeMat!=null?'block':'none'; }; el.appendChild(d); }); }
+$('swEdit').oninput=e=>{ if(activeMat==null) return; spec.palette[activeMat]=e.target.value; renderPalette(); rebuild(); };
+
+function syncProps(){ refreshCoord(); const el=$('props'), f=F(); if(!sel){ el.innerHTML='<small>Nothing selected. Draw the outline (⬠), then partitions (│). Window/Door/Stairs tools add by tapping. ⬚ Open cuts a hole in this floor (open-to-below / high ceilings). Select a top-floor wall to flip it into a dormer.</small>'; return; }
+  if(sel.kind==='outline'){ el.innerHTML='<small>Footprint of Floor '+(cur+1)+' (the foundation). Drag the corner dots to reshape it (L-shapes, bays). Drag empty space to pan the view.</small>'+
+    '<button id="paddc" class="wide">＋ add corner</button>';
+    $('paddc').onclick=addCornerLongest; }
+  else if(sel.kind==='vertex'){ const p=f.outline[sel.idx]; el.innerHTML=
+    '<label>E (east) <input id="vx" type="number" step="0.5" value="'+p[0]+'"></label><label>N (north) <input id="vz" type="number" step="0.5" value="'+(-p[1])+'"></label>'+
+    '<button id="paddc" class="wide">＋ add corner after this</button>'+
+    '<button id="pdel" class="wide">🗑 delete corner</button>';
+    $('vx').oninput=e=>{p[0]=+e.target.value;rebuild();}; $('vz').oninput=e=>{p[1]=-(+e.target.value);rebuild();};
+    $('paddc').onclick=()=>insertCornerAfter(sel.idx);
+    $('pdel').onclick=()=>{ if(f.outline.length<=3)return; const c=outlineCenters(f); f.outline.splice(sel.idx,1); reanchor(f,c); sel=null; rebuild(); }; }
+  else if(sel.kind==='void'){ el.innerHTML='<small>Open-to-below cutout on Floor '+(cur+1)+' — the slab is removed here so the space is open to the floor below (double-height). Drag its dots to reshape.</small>'+
+    '<button id="paddc" class="wide">＋ add corner</button>'+
+    '<button id="pdel" class="wide">🗑 remove cutout</button>';
+    $('paddc').onclick=()=>addVoidCornerLongest(sel.idx);
+    $('pdel').onclick=()=>{ f.voids.splice(sel.idx,1); sel=null; rebuild(); }; }
+  else if(sel.kind==='voidvtx'){ const p=f.voids[sel.vi][sel.pi]; el.innerHTML=
+    '<label>E (east) <input id="vx" type="number" step="0.5" value="'+p[0]+'"></label><label>N (north) <input id="vz" type="number" step="0.5" value="'+(-p[1])+'"></label>'+
+    '<button id="paddc" class="wide">＋ add corner after this</button>'+
+    '<button id="pdel" class="wide">🗑 delete corner</button>';
+    $('vx').oninput=e=>{p[0]=+e.target.value;rebuild();}; $('vz').oninput=e=>{p[1]=-(+e.target.value);rebuild();};
+    $('paddc').onclick=()=>insertVoidCorner(sel.vi,sel.pi);
+    $('pdel').onclick=()=>{ const v=f.voids[sel.vi]; if(v.length<=3){ f.voids.splice(sel.vi,1); } else { v.splice(sel.pi,1); } sel=null; rebuild(); }; }
+  else if(sel.kind==='wall'){ const w=f.walls[sel.idx];
+    el.innerHTML='<small>Interior wall. Drag the end dots to move it'+(isTopFloor()?', or make it a dormer (pokes through the roof with a window).':'.')+' Paint each side its own colour by tapping that face in 3D.</small>'+
+      (isTopFloor()?'<label>make dormer <input id="pdorm" type="checkbox"'+(w.dormer?' checked':'')+'></label>':'')+
+      '<button id="pdel" class="wide">🗑 delete wall</button>';
+    if(isTopFloor()) $('pdorm').onchange=e=>{ w.dormer=e.target.checked; rebuild(); };
+    $('pdel').onclick=()=>{ f.walls.splice(sel.idx,1); f.openings=f.openings.filter(o=>!(o.on==='wall'&&o.wi===sel.idx)).map(o=>{ if(o.on==='wall'&&o.wi>sel.idx)o.wi--; return o;}); sel=null; rebuild(); }; }
+  else if(sel.kind==='opening'){ const o=f.openings[sel.idx]; el.innerHTML=
+    '<label>type <select id="ptype"><option value="window"'+(o.type==='window'?' selected':'')+'>window</option><option value="door"'+(o.type==='door'?' selected':'')+'>door</option></select></label>'+
+    '<label>width (ft) <input id="pow" type="range" min="2" max="12" step="0.5" value="'+o.w+'"></label>'+
+    '<label>sill (ft) <input id="poy0" type="number" min="0" max="12" step="0.5" value="'+o.y0+'"></label>'+
+    '<label>head (ft) <input id="poy1" type="number" min="4" max="16" step="0.5" value="'+o.y1+'"></label>'+
+    '<label>slide <input id="poff" type="range" min="0" max="1" step="0.01" value="'+((o.off/Math.max(0.1,openLen(f,o)-o.w))||0)+'"></label>'+
+    '<button id="pdel" class="wide">🗑 delete</button>';
+    $('ptype').onchange=e=>{o.type=e.target.value;rebuild();}; $('pow').oninput=e=>{o.w=+e.target.value;rebuild();};
+    $('poy0').oninput=e=>{o.y0=+e.target.value;rebuild();}; $('poy1').oninput=e=>{o.y1=+e.target.value;rebuild();};
+    $('poff').oninput=e=>{o.off=+e.target.value*Math.max(0,openLen(f,o)-o.w);rebuild();};
+    $('pdel').onclick=()=>{f.openings.splice(sel.idx,1);sel=null;rebuild();}; }
+  else if(sel.kind==='stair'){ const st=spec.stairs[sel.idx]; el.innerHTML=
+    '<label>facing <select id="psd"><option '+(st.dir==='N'?'selected':'')+'>N</option><option '+(st.dir==='S'?'selected':'')+'>S</option><option '+(st.dir==='E'?'selected':'')+'>E</option><option '+(st.dir==='W'?'selected':'')+'>W</option></select></label>'+
+    '<label>run (ft) <input id="psrun" type="range" min="6" max="20" step="0.5" value="'+(st.run||10)+'"></label>'+
+    '<label>width (ft) <input id="psw" type="range" min="2.5" max="6" step="0.25" value="'+(st.w||3)+'"></label>'+
+    '<small>Rises Floor '+((st.floor||0)+1)+'→'+((st.floor||0)+2)+'; cuts a stairwell hole above.</small><button id="pdel" class="wide">🗑 delete stairs</button>';
+    $('psd').onchange=e=>{st.dir=e.target.value;rebuild();}; $('psrun').oninput=e=>{st.run=+e.target.value;rebuild();};
+    $('psw').oninput=e=>{st.w=+e.target.value;rebuild();}; $('pdel').onclick=()=>{spec.stairs.splice(sel.idx,1);sel=null;rebuild();}; }
+}
+addEventListener('keydown',e=>{ if(isPolyMode(mode)&&e.key==='Enter'){ finishPoly(); return; }
+  if(e.key==='Escape'&&poly){ cancelPoly(); return; }
+  if(walk){ const k=e.key.toLowerCase(); if(k==='w')mv.fwd=1; if(k==='s')mv.back=1; if(k==='a')mv.left=1; if(k==='d')mv.right=1; if(k==='q')mv.down=1; if(k==='e')mv.up=1; return; }
+  if(sel && e.key.startsWith('Arrow')){                        // arrow keys nudge the selected point (Shift = 5 ft)
+    const s=e.shiftKey?5:1; let dx=0,dz=0;
+    if(e.key==='ArrowLeft')dx=-s; else if(e.key==='ArrowRight')dx=s; else if(e.key==='ArrowUp')dz=-s; else if(e.key==='ArrowDown')dz=s;
+    if((dx||dz)&&nudgeSel(dx,dz)){ e.preventDefault(); return; } }
+  if((e.key==='Delete'||e.key==='Backspace')&&sel){ e.preventDefault(); const b=$('pdel'); if(b) b.click(); } });
+addEventListener('keyup',e=>{ const k=e.key.toLowerCase(); if(k==='w')mv.fwd=0; if(k==='s')mv.back=0; if(k==='a')mv.left=0; if(k==='d')mv.right=0; if(k==='q')mv.down=0; if(k==='e')mv.up=0; });
+
+// ---------- save / load ----------
+function cleanSpec(){ return { floors:spec.floors.map(f=>({outline:f.outline,h:f.h,walls:f.walls,openings:f.openings,mats:f.mats,matsIn:f.matsIn,voids:f.voids})),
+  roof:spec.roof, stairs:spec.stairs, palette:spec.palette, colors:spec.colors }; }
+$('save').onclick=()=>{ const out=JSON.stringify(cleanSpec()); localStorage.setItem(KEY_SCENE,out); localStorage.setItem(KEY_DRAFT,out); const b=$('save'); b.textContent='✓ Saved — reload the scene'; setTimeout(()=>b.textContent='💾 Save to Scene',1800); };
+$('copy').onclick=()=>{ const t=JSON.stringify(cleanSpec()); $('dump').value=t; try{navigator.clipboard.writeText(t);}catch(e){} };
+$('export').onclick=()=>{ const name=(prompt('Name this structure — the file will be <name>.json','montana-home')||'').trim(); if(!name) return;
+  const fname=name.replace(/[^\w.-]+/g,'_')+'.json'; const t=JSON.stringify(cleanSpec());
+  $('dump').value=t;                                             // phone-safe fallback: text is always here to copy
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([t],{type:'application/json'})); a.download=fname;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  const b=$('export'); b.textContent='⬇ '+fname; setTimeout(()=>b.textContent='⬇ Export .json file',2000); };
+$('load').onclick=()=>{ spec=migrate(JSON.parse(localStorage.getItem(KEY_SCENE)||'null')); cur=0; sel=null; poly=null; init(); };
+
+function init(){ $('fh').value=F().h; $('roofStyle').value=spec.roof.style||'gable'; $('roofPitch').value=spec.roof.pitch??0.5;
+  renderTabs(); renderPalette(); setMode('sel'); rebuild(); }
+new ResizeObserver(()=>{planResize();resize();}).observe(document.getElementById('mid'));
+planResize(); resize(); init();
+</script>
+</body>
+</html>
