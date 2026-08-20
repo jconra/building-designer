@@ -55,7 +55,7 @@
 <body>
 <div id="wrap">
   <div id="left">
-    <h2>🏠 Home Designer</h2>
+    <h2>🏠 Home Designer <span id="ver" style="font-size:11px;font-weight:normal;opacity:.6"></span></h2>
     <button id="closePanel">✕</button>
 
     <div class="sec">floors</div>
@@ -63,7 +63,7 @@
     <div class="row" style="margin-top:6px">
       <button id="addFloor" class="mini">＋ floor</button>
       <button id="delFloor" class="mini">🗑 floor</button>
-      <label style="margin-left:auto">height (ft) <input id="fh" type="number" min="7" max="30" step="0.5"></label>
+      <span style="margin-left:auto;display:flex;align-items:center;gap:6px">height <button id="fhd" style="width:36px;height:32px;font-size:18px">−</button><span id="fh" style="min-width:44px;text-align:center;font-variant-numeric:tabular-nums"></span><button id="fhu" style="width:36px;height:32px;font-size:18px">＋</button> ft</span>
     </div>
 
     <div class="sec">tool</div>
@@ -74,27 +74,29 @@
       <button id="mDoor">🚪 Door</button>
       <button id="mStair">🪜 Stairs</button>
       <button id="mVoid">⬚ Open</button>
+      <button id="mRoof">🛆 Roof</button>
       <button id="mSel" class="on">↖ Select</button>
     </div>
 
     <div class="sec">selected</div>
     <div id="props"><small>Draw the outline (⬠) — click each corner, click the first dot to close. Drag corners to make L-shapes or bays. Draw walls (│) to split rooms; on the top floor a wall can be flipped to a dormer.</small></div>
 
-    <div class="sec">roof (whole house)</div>
-    <label>style <select id="roofStyle"><option value="gable">gable</option><option value="hip">hip</option><option value="shed">shed</option><option value="flat">flat</option></select></label>
-    <label>pitch <input id="roofPitch" type="range" min="0.15" max="1.1" step="0.05"></label>
-    <label>hide roof (look inside) <input id="noRoof" type="checkbox"></label>
+    <div class="sec">windows</div>
+    <label>window frames <input id="winFrames" type="checkbox"></label>
+    <small>Roofs are objects now: use the 🛆 Roof tool to add one, tap it to set style / pitch / ridge. The main house roof is a roof piece too.</small>
 
-    <div class="sec">materials — pick a swatch, tap a wall face in 3D to paint it. Outer walls paint each side on its own (peek inside with "hide roof" to paint the interior).</div>
+    <div class="sec">materials — pick a swatch, tap a wall face (or a floor) in 3D to paint it. Outer walls paint each side on its own (select a lower floor tab to open the top off and paint the interior/floors).</div>
     <div class="swrow" id="palette"></div>
     <label style="margin-top:6px">edit swatch <input id="swEdit" type="color"></label>
+    <label style="margin-top:6px">texture <select id="swTex"></select></label>
 
-    <div class="sec">save</div>
+    <div class="sec">JSON — paste a design into the box then Build, or Copy the current scene out</div>
+    <button id="copy" class="wide">📋 Copy JSON → box</button>
+    <button id="build" class="wide">▶ Build from box</button>
+    <textarea id="dump" placeholder="paste a design's JSON here, then hit Build — or Copy JSON to drop the current scene in"></textarea>
+    <button id="loadFile" class="wide">⤓ Load latest (staged file)</button>
     <button id="save" class="wide">💾 Save to Scene</button>
-    <button id="copy" class="wide">📋 Copy JSON</button>
-    <button id="export" class="wide">⬇ Export .json file</button>
-    <button id="load" class="wide">↺ Load saved</button>
-    <textarea id="dump" readonly placeholder="exported JSON appears here"></textarea>
+    <button id="load" class="wide">↺ Load last Save-to-Scene</button>
     <small>Top grid = current floor's plan (floor below shown faint). Bottom = live 3D. <b>Save to Scene</b> puts it on your land — reload the main scene.</small>
   </div>
   <div id="mid">
@@ -121,7 +123,18 @@
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { buildHouse } from './house-model.js?v=6';
+import { buildHouse, TEX_LIST, texThumb, VERSION } from './house-model.js?v=38';
+{ const vel=document.getElementById('ver'); if(vel) vel.textContent='build '+VERSION; }
+
+// ---- on-screen error overlay (phone has no console) ----
+const _err=document.createElement('div');
+_err.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#b3261e;color:#fff;font:12px/1.4 monospace;padding:8px 34px 8px 10px;white-space:pre-wrap;max-height:40%;overflow:auto;display:none;box-shadow:0 -2px 8px rgba(0,0,0,.4)';
+_err.innerHTML='<span style="position:absolute;top:4px;right:10px;font-size:16px;cursor:pointer">✕</span><span id="_errmsg"></span>';
+document.body.appendChild(_err); _err.onclick=()=>{_err.style.display='none';};
+function showErr(m){ document.getElementById('_errmsg').textContent='⚠ build '+VERSION+' · '+m; _err.style.display='block'; }
+function clearErr(){ _err.style.display='none'; }
+addEventListener('error',e=>showErr((e.message||'error')+(e.filename?(' @'+String(e.filename).split('/').pop()+':'+e.lineno):'')));
+addEventListener('unhandledrejection',e=>showErr('promise: '+(e.reason&&e.reason.message||e.reason)));
 
 // ---------- state ----------
 const DEF_PAL=['#6b5a45','#ffffff','#33363a','#8a6d4b','#aeb6bd','#241a12'];
@@ -131,7 +144,14 @@ const DEFAULT_SPEC='{"floors":[{"outline":[[-30,-15],[30,-15],[30,15],[7,15],[7,
 function freshSpec(){ return migrate(JSON.parse(DEFAULT_SPEC)); }
 function migrate(s){
   if(!s) return freshSpec();
-  s.palette=s.palette||DEF_PAL.slice(); s.stairs=s.stairs||[]; s.colors=s.colors||{wall:'#6b5a45',roof:'#33363a',trim:'#dad6c8'}; s.roof=s.roof||{style:'gable',pitch:0.5};
+  s.palette=s.palette||DEF_PAL.slice(); s.palTex=s.palTex||[]; s.stairs=s.stairs||[]; s.roofPieces=s.roofPieces||[]; s.colors=s.colors||{wall:'#6b5a45',roof:'#33363a',trim:'#dad6c8'};
+  // the main house roof is now just a roof piece too — convert an old whole-house roof into one (sized to the top-floor bbox)
+  if(s.floors&&s.floors.length&&s.roof&&s.roof.style&&s.roof.style!=='none'){
+    const o=s.floors[s.floors.length-1].outline; let x0=1e9,x1=-1e9,z0=1e9,z1=-1e9; o.forEach(p=>{x0=Math.min(x0,p[0]);x1=Math.max(x1,p[0]);z0=Math.min(z0,p[1]);z1=Math.max(z1,p[1]);});
+    let acc=0; s.floors.forEach(f=>acc+=(f.h||10));
+    s.roofPieces.unshift({x:(x0+x1)/2,z:(z0+z1)/2,w:x1-x0,d:z1-z0,base:acc,style:s.roof.style,pitch:s.roof.pitch??0.5,mat:s.roof.mat,gableMat:s.roof.gableMat,flipRidge:!!s.roof.flipRidge,raiseWalls:false});
+  }
+  s.roof=null;
   if(s.blocks&&s.blocks.length&&!s.floors){ const b=s.blocks[0];
     s.floors=[{outline:rectOut(b.x,b.z,b.w,b.d),h:b.h||6,walls:[],openings:[],mats:{}}]; s.roof={style:b.roof||'gable',pitch:b.pitch??0.5}; }
   if(!s.floors) return freshSpec();
@@ -145,6 +165,7 @@ function migrate(s){
 const KEY_SCENE='montanaHouse', KEY_DRAFT='montanaHouseDraft';   // draft = designer's working copy; scene = committed house
 let spec = migrate(JSON.parse(localStorage.getItem(KEY_DRAFT)||localStorage.getItem(KEY_SCENE)||'null'));
 let cur = 0, mode = 'sel';
+let showRoof = true;         // 3D view: true = whole house w/ roof (Roof tab); false = peel to floor `cur` with the top open
 let sel = null;          // {kind:'vertex'|'outline'|'wall'|'opening'|'stair', idx?}
 let activeMat = null;
 let poly = null;         // in-progress outline vertices while drawing
@@ -174,6 +195,11 @@ function outlineCenters(f){ return f.openings.map(o=>{ if(o.on!=='outline')retur
 function reanchor(f,centers){ f.openings.forEach((o,i)=>{ if(o.on!=='outline'||!centers[i])return; const c=centers[i]; let best=null;
   for(let e=0;e<f.outline.length;e++){ const a=f.outline[e],b=f.outline[(e+1)%f.outline.length]; const p=proj(c[0],c[1],a,b); if(!best||p.dist<best.dist) best={e,off:p.off}; }
   o.edge=best.e; o.off=Math.max(0,best.off-o.w/2); }); }
+// vertex-move version: keep each window on its OWN wall (never reassign the edge), just hold its world spot along it
+function reprojectOpenings(f,centers){ f.openings.forEach((o,i)=>{ if(o.on!=='outline'||!centers[i])return; const c=centers[i];
+  const a=f.outline[o.edge], b=f.outline[(o.edge+1)%f.outline.length];
+  const L=Math.hypot(b[0]-a[0],b[1]-a[1]), p=proj(c[0],c[1],a,b);
+  o.off=Math.max(0, Math.min(Math.max(0,L-o.w), p.off-o.w/2)); }); }
 
 // ---------- 2D plan editor ----------
 const plan=document.getElementById('plan'), pc=plan.getContext('2d');
@@ -220,6 +246,13 @@ function draw2d(){
   if(cur>0){ spec.stairs.filter(s=>(s.floor||0)===cur-1).forEach(st=>{ const r=stairRect(st), A=toS(r.x-r.w/2,r.z-r.d/2);
     pc.strokeStyle='#6f7f4a'; pc.setLineDash([5,4]); pc.lineWidth=2; pc.strokeRect(A[0],A[1],r.w*PPM,r.d*PPM); pc.setLineDash([]);
     const c=toS(st.x,st.z); pc.fillStyle='#93a35d'; pc.font='11px system-ui'; pc.fillText('▼ stairwell',c[0]-26,c[1]+4); }); }
+  // placeable roof pieces — dashed violet rect + ridge line, corner dots when selected
+  (spec.roofPieces||[]).forEach((rp,ri)=>{ const on=sel&&sel.kind==='roof'&&sel.idx===ri;
+    const A=toS(rp.x-rp.w/2,rp.z-rp.d/2); pc.setLineDash([5,4]); pc.strokeStyle=on?'#7ee787':'#c792ea'; pc.lineWidth=on?3:2;
+    pc.strokeRect(A[0],A[1],rp.w*PPM,rp.d*PPM); pc.setLineDash([]);
+    if(rp.w>=rp.d) line([rp.x-rp.w/2,rp.z],[rp.x+rp.w/2,rp.z], on?'#7ee787':'#c792ea',1); else line([rp.x,rp.z-rp.d/2],[rp.x,rp.z+rp.d/2], on?'#7ee787':'#c792ea',1);   // ridge
+    const c=toS(rp.x,rp.z); pc.fillStyle=on?'#7ee787':'#c792ea'; pc.font='10px system-ui'; pc.fillText('🛆 roof',c[0]-14,c[1]-3);
+    if(on) for(const [sx,sz] of [[-1,-1],[1,-1],[1,1],[-1,1]]) dot([rp.x+sx*rp.w/2,rp.z+sz*rp.d/2],'#ffd76a',5); });
   // in-progress outline
   if(poly&&poly.length){ pc.strokeStyle='#7ee787'; pc.lineWidth=2;
     for(let i=0;i<poly.length-1;i++) line(poly[i],poly[i+1],'#7ee787',2);
@@ -238,17 +271,19 @@ function coordForSel(){ const f=F(); if(!sel) return null;
   if(sel.kind==='voidvtx') return f.voids[sel.vi][sel.pi].slice();
   if(sel.kind==='stair'){ const s=spec.stairs[sel.idx]; return [s.x,s.z]; }
   if(sel.kind==='wall'){ const w=f.walls[sel.idx]; return [(w.x0+w.x1)/2,(w.z0+w.z1)/2]; }
+  if(sel.kind==='roof'){ const rp=spec.roofPieces[sel.idx]; return [rp.x,rp.z]; }
   return null; }
 // show the selected point's position persistently (not just while dragging)
 function refreshCoord(){ const p=coordForSel(); if(p) showCoord(p[0],p[1]); else hideCoord(); }
 // arrow keys nudge the selected point/wall/stair/footprint by dx,dz feet
 function nudgeSel(dx,dz){ const f=F(); if(!sel) return false;
-  if(sel.kind==='vertex'){ const p=f.outline[sel.idx]; p[0]=snap(p[0]+dx); p[1]=snap(p[1]+dz); }
+  if(sel.kind==='vertex'){ const c=outlineCenters(f); const p=f.outline[sel.idx]; p[0]=snap(p[0]+dx); p[1]=snap(p[1]+dz); reprojectOpenings(f,c); }
   else if(sel.kind==='voidvtx'){ const p=f.voids[sel.vi][sel.pi]; p[0]=snap(p[0]+dx); p[1]=snap(p[1]+dz); }
   else if(sel.kind==='void'){ f.voids[sel.idx]=f.voids[sel.idx].map(p=>[snap(p[0]+dx),snap(p[1]+dz)]); }
   else if(sel.kind==='wall'){ const w=f.walls[sel.idx]; w.x0=snap(w.x0+dx); w.z0=snap(w.z0+dz); w.x1=snap(w.x1+dx); w.z1=snap(w.z1+dz); }
   else if(sel.kind==='stair'){ const s=spec.stairs[sel.idx]; s.x=snap(s.x+dx); s.z=snap(s.z+dz); }
   else if(sel.kind==='outline'){ f.outline=f.outline.map(p=>[snap(p[0]+dx),snap(p[1]+dz)]); }
+  else if(sel.kind==='roof'){ const rp=spec.roofPieces[sel.idx]; rp.x=snap(rp.x+dx); rp.z=snap(rp.z+dz); }
   else return false;
   rebuild(); refreshCoord(); return true; }
 // insert a corner at the midpoint of the edge after vertex e (keeps openings glued)
@@ -280,6 +315,9 @@ function handleTap(wx,wz){                                          // tap-to-pl
     poly.push([snap(wx),snap(wz)]); updateDrawbar(); draw2d(); return; }
   if(mode==='win'||mode==='door'){ const nw=nearestWall(wx,wz); if(nw&&nw.dist<1.6) addOpening(nw, mode==='door'?'door':'window'); return; }
   if(mode==='stair'){ spec.stairs.push({x:snap(wx),z:snap(wz),w:3,run:10,dir:'N',floor:cur}); sel={kind:'stair',idx:spec.stairs.length-1}; rebuild(); return; }
+  if(mode==='roof'){ spec.roofPieces=spec.roofPieces||[];                     // drop a placeable roof piece, then jump to Select so you can size/drag it
+    spec.roofPieces.push({x:snap(wx),z:snap(wz),w:14,d:12,base:10,style:'gable',pitch:0.5,raiseWalls:true});
+    sel={kind:'roof',idx:spec.roofPieces.length-1}; showRoof=true; setMode('sel'); renderTabs(); rebuild(); return; }
 }
 plan.addEventListener('contextmenu',e=>e.preventDefault());
 plan.addEventListener('pointerdown',e=>{
@@ -291,7 +329,7 @@ plan.addEventListener('pointerdown',e=>{
   if(mode==='wall'){ drag={mode:'newWall',x0:snap(wx),z0:snap(wz),x1:snap(wx),z1:snap(wz)}; draw2d(); return; }
   if(mode==='sel'){
     // grab a footprint corner dot
-    for(let i=0;i<f.outline.length;i++){ if(Math.hypot(wx-f.outline[i][0],wz-f.outline[i][1])<0.8){ sel={kind:'vertex',idx:i}; drag={mode:'vtx',i}; draw2d(); syncProps(); return; } }
+    for(let i=0;i<f.outline.length;i++){ if(Math.hypot(wx-f.outline[i][0],wz-f.outline[i][1])<0.8){ sel={kind:'vertex',idx:i}; drag={mode:'vtx',i,centers:outlineCenters(f)}; draw2d(); syncProps(); return; } }   // capture window spots so they can be re-glued on release
     // grab a floor-cutout corner dot
     for(let vi=0;vi<(f.voids||[]).length;vi++){ const v=f.voids[vi];
       for(let pi=0;pi<v.length;pi++){ if(Math.hypot(wx-v[pi][0],wz-v[pi][1])<0.8){ sel={kind:'voidvtx',vi,pi}; drag={mode:'voidpt',vi,pi}; draw2d(); syncProps(); return; } } }
@@ -302,6 +340,14 @@ plan.addEventListener('pointerdown',e=>{
     // grab a stair icon to reposition it
     for(const st of f_stairs()){ const r=stairRect(st); if(Math.abs(wx-r.x)<=r.w/2&&Math.abs(wz-r.z)<=r.d/2){
       sel={kind:'stair',idx:st.__i}; drag={mode:'moveStair',ox:wx-spec.stairs[st.__i].x,oz:wz-spec.stairs[st.__i].z}; draw2d(); syncProps(); return; } }
+    // grab a selected roof piece's corner dot (opposite corner stays put) to resize it
+    if(sel&&sel.kind==='roof'){ const rp=spec.roofPieces[sel.idx];
+      for(const [sx,sz] of [[-1,-1],[1,-1],[1,1],[-1,1]]){ if(Math.hypot(wx-(rp.x+sx*rp.w/2),wz-(rp.z+sz*rp.d/2))<0.9){
+        drag={mode:'roofCorner', fx:rp.x-sx*rp.w/2, fz:rp.z-sz*rp.d/2}; return; } } }
+    // grab a roof piece's body to select + move it
+    for(let ri=(spec.roofPieces||[]).length-1;ri>=0;ri--){ const rp=spec.roofPieces[ri];
+      if(Math.abs(wx-rp.x)<=rp.w/2 && Math.abs(wz-rp.z)<=rp.d/2){ sel={kind:'roof',idx:ri};
+        drag={mode:'moveRoof',ox:wx-rp.x,oz:wz-rp.z}; showRoof=true; renderTabs(); draw2d(); syncProps(); return; } }
     // otherwise: one-finger drag pans the view; a tap (no drag) selects what's under the finger
     drag={mode:'pan',sx:e.clientX,sy:e.clientY,cx:camX,cz:camZ};
     return;
@@ -317,10 +363,14 @@ plan.addEventListener('pointermove',e=>{
   if(isPolyMode(mode)&&poly&&poly.length){ hoverPt=[wx,wz]; showCoord(snap(wx),snap(wz)); draw2d(); return; }
   if(!drag) return; const f=F();
   if(drag.mode==='newWall'){ drag.x1=snap(wx); drag.z1=snap(wz); showCoord(drag.x1,drag.z1); }
-  else if(drag.mode==='vtx'){ f.outline[drag.i]=[snap(wx),snap(wz)]; showCoord(snap(wx),snap(wz)); rebuild(); }
-  else if(drag.mode==='wend'){ const w=f.walls[sel.idx]; if(drag.end===0){w.x0=snap(wx);w.z0=snap(wz);}else{w.x1=snap(wx);w.z1=snap(wz);} showCoord(snap(wx),snap(wz)); rebuild(); }
-  else if(drag.mode==='voidpt'){ f.voids[drag.vi][drag.pi]=[snap(wx),snap(wz)]; showCoord(snap(wx),snap(wz)); rebuild(); }
-  else if(drag.mode==='moveStair'){ const s=spec.stairs[sel.idx]; s.x=snap(wx-drag.ox); s.z=snap(wz-drag.oz); showCoord(s.x,s.z); rebuild(); }
+  // editing drags update the data + live 2D only; the heavy 3D rebuild happens once on release (below)
+  else if(drag.mode==='vtx'){ f.outline[drag.i]=[snap(wx),snap(wz)]; showCoord(snap(wx),snap(wz)); }
+  else if(drag.mode==='wend'){ const w=f.walls[sel.idx]; if(drag.end===0){w.x0=snap(wx);w.z0=snap(wz);}else{w.x1=snap(wx);w.z1=snap(wz);} showCoord(snap(wx),snap(wz)); }
+  else if(drag.mode==='voidpt'){ f.voids[drag.vi][drag.pi]=[snap(wx),snap(wz)]; showCoord(snap(wx),snap(wz)); }
+  else if(drag.mode==='moveStair'){ const s=spec.stairs[sel.idx]; s.x=snap(wx-drag.ox); s.z=snap(wz-drag.oz); showCoord(s.x,s.z); }
+  else if(drag.mode==='roofCorner'){ const rp=spec.roofPieces[sel.idx], nx=snap(wx), nz=snap(wz);
+    rp.x=(drag.fx+nx)/2; rp.z=(drag.fz+nz)/2; rp.w=Math.max(2,Math.abs(nx-drag.fx)); rp.d=Math.max(2,Math.abs(nz-drag.fz)); showCoord(nx,nz); }
+  else if(drag.mode==='moveRoof'){ const rp=spec.roofPieces[sel.idx]; rp.x=snap(wx-drag.ox); rp.z=snap(wz-drag.oz); showCoord(rp.x,rp.z); }
   draw2d();
 });
 function endPointer(e){
@@ -331,6 +381,8 @@ function endPointer(e){
     down=null; hideCoord(); draw2d(); syncProps(); return; }
   if(drag&&drag.mode==='newWall'){ const L=Math.hypot(drag.x1-drag.x0,drag.z1-drag.z0);
     if(L>=1){ F().walls.push({x0:drag.x0,z0:drag.z0,x1:drag.x1,z1:drag.z1}); sel={kind:'wall',idx:F().walls.length-1}; rebuild(); } }
+  else if(drag && ['vtx','wend','voidpt','moveStair','roofCorner','moveRoof'].indexOf(drag.mode)>=0){
+    if(down && down.moved){ if(drag.mode==='vtx'&&drag.centers) reprojectOpenings(F(),drag.centers); rebuild(); } }   // only commit if it actually moved — a plain click must NOT touch the windows
   else if(down && e.pointerId===down.id && !down.moved){ handleTap(down.wx,down.wz); }
   drag=null; down=null; hideCoord(); draw2d(); syncProps();
 }
@@ -357,7 +409,10 @@ function pickAt(wx,wz){ const f=F();
 
 // ---------- 3D preview ----------
 const view=document.getElementById('view');
-const renderer=new THREE.WebGLRenderer({canvas:view,antialias:true});
+const renderer=(()=>{ const base={canvas:view, failIfMajorPerformanceCaveat:false};   // keep the graceful fallback, but antialiasing back on (looks better)
+  try{ return new THREE.WebGLRenderer({...base, antialias:true}); }
+  catch(e){ try{ return new THREE.WebGLRenderer({...base, antialias:false}); }
+    catch(e2){ showErr('Could not start the 3D view (WebGL). Close your other browser tabs and reload — the phone is out of GPU memory/contexts.'); throw e2; } } })();
 renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.outputEncoding=THREE.sRGBEncoding;
 const scene=new THREE.Scene(); scene.background=new THREE.Color(0x9fb8d0);
 const cam=new THREE.PerspectiveCamera(50,1,0.1,3000); cam.position.set(24,20,28);
@@ -368,8 +423,16 @@ scene.add(new THREE.GridHelper(140,140,0x334155,0x1c2732));
 let houseGroup=null;
 let persistT=null;
 function persist(){ clearTimeout(persistT); persistT=setTimeout(()=>{ try{ localStorage.setItem(KEY_DRAFT, JSON.stringify(cleanSpec())); }catch(e){} }, 250); }
-function rebuild(){ if(houseGroup) scene.remove(houseGroup);
-  houseGroup=buildHouse(THREE, spec, {noRoof:$('noRoof').checked}); scene.add(houseGroup); draw2d(); syncProps(); persist(); }
+function rebuild(){
+  const opts = showRoof ? {} : {upto:Math.min(cur,spec.floors.length-1), noRoof:true};   // peel to the selected floor (top open) unless Roof is active
+  try{ const g2=buildHouse(THREE, spec, opts);          // build into a temp first — a bad value can't wipe the last good house
+    const old=houseGroup; houseGroup=g2; scene.add(houseGroup);
+    if(old){ scene.remove(old); disposeGroup(old); }    // free the previous build's GPU memory (geometry+materials) so dragging can't leak into a crash
+    clearErr(); }
+  catch(e){ showErr('3D build failed — '+(e&&e.message||e)); }
+  draw2d(); syncProps(); persist(); }
+function disposeGroup(gr){ gr.traverse(o=>{ if(o.isMesh){ if(o.geometry) o.geometry.dispose();   // note: shared textures live in a cache and are intentionally NOT disposed
+  const m=o.material; (Array.isArray(m)?m:[m]).forEach(x=>{ if(x&&x.dispose) x.dispose(); }); } }); }
 function resize(){const w=view.clientWidth,h=view.clientHeight;renderer.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix();}
 
 // ---- first-person walk-through ----
@@ -387,7 +450,12 @@ function stepWalk(){ const sp=0.12, cy=Math.cos(yaw), sy=Math.sin(yaw);
   if(mv.right){cam.position.x-=cy*sp;cam.position.z+=sy*sp;} if(mv.left){cam.position.x+=cy*sp;cam.position.z-=sy*sp;}
   if(mv.up){cam.position.y+=sp;} if(mv.down){cam.position.y=Math.max(0.3,cam.position.y-sp);}
   const cp=Math.cos(pitch); cam.lookAt(cam.position.x+sy*cp, cam.position.y+Math.sin(pitch), cam.position.z+cy*cp); }
-(function loop(){requestAnimationFrame(loop); if(walk) stepWalk(); else ctr.update(); renderer.render(scene,cam);})();
+let _renderDead=false;
+view.addEventListener('webglcontextlost',e=>{ e.preventDefault(); _renderDead=true; showErr('WebGL context lost (the 3D crashed — usually out of memory). Reload the page.'); });
+view.addEventListener('webglcontextrestored',()=>{ _renderDead=false; clearErr(); });
+(function loop(){ requestAnimationFrame(loop); if(_renderDead) return;
+  try{ if(walk) stepWalk(); else ctr.update(); renderer.render(scene,cam); }
+  catch(e){ _renderDead=true; showErr('render crashed — '+(e&&e.message||e)); } })();
 
 const ray=new THREE.Raycaster(), ndc=new THREE.Vector2(); let downXY=null;
 view.addEventListener('pointerdown',e=>{ downXY=[e.clientX,e.clientY]; if(walk) lookLast=[e.clientX,e.clientY]; });
@@ -408,19 +476,21 @@ view.addEventListener('pointerup',e=>{
     else { f.mats=f.mats||{}; f.mats[surf.edge]=activeMat; } }
   else if(surf.kind==='wall'){ const w=spec.floors[surf.floor].walls[surf.wi];
     if(otherSide) w.matIn=activeMat; else w.mat=activeMat; }
-  else if(surf.kind==='roof'){ spec.roof.mat=activeMat; }
+  else if(surf.kind==='roof'){ if(surf.pi!=null&&spec.roofPieces[surf.pi]) spec.roofPieces[surf.pi].mat=activeMat; else if(spec.roof) spec.roof.mat=activeMat; }
+  else if(surf.kind==='gable'){ if(surf.pi!=null&&spec.roofPieces[surf.pi]) spec.roofPieces[surf.pi].gableMat=activeMat; else if(spec.roof) spec.roof.gableMat=activeMat; }   // vertical gable-end triangle
+  else if(surf.kind==='floor'){ spec.floors[surf.floor].floorMat=activeMat; }
   rebuild();
 });
 
 // ---------- left-panel controls ----------
 const isMobile=()=>matchMedia('(pointer:coarse)').matches||matchMedia('(max-width:760px)').matches;
 const collapse=()=>document.body.classList.add('collapsed');
-const TOOLICON={outline:'⬠',wall:'│',win:'🪟',door:'🚪',stair:'🪜',void:'⬚',sel:'↖'};
+const TOOLICON={outline:'⬠',wall:'│',win:'🪟',door:'🚪',stair:'🪜',void:'⬚',roof:'🛆',sel:'↖'};
 const isPolyMode=m=> m==='outline'||m==='void';
 $('fab').onclick=()=>document.body.classList.toggle('collapsed');
 $('closePanel').onclick=collapse;
 function setMode(m){ mode=m; poly = isPolyMode(m) ? [] : null; hoverPt=null;   // Outline / Open begin a fresh polygon
-  for(const [id,mm] of [['mOutline','outline'],['mWall','wall'],['mWin','win'],['mDoor','door'],['mStair','stair'],['mVoid','void'],['mSel','sel']]) $(id).classList.toggle('on', mm===m);
+  for(const [id,mm] of [['mOutline','outline'],['mWall','wall'],['mWin','win'],['mDoor','door'],['mStair','stair'],['mVoid','void'],['mRoof','roof'],['mSel','sel']]) $(id).classList.toggle('on', mm===m);
   $('fab').textContent = TOOLICON[m]||'☰'; if(isMobile()) collapse();
   $('paintHint').style.display = activeMat!=null ? 'block':'none'; updateDrawbar(); draw2d(); }
 function updateDrawbar(){ const on=(isPolyMode(mode)&&poly); $('drawbar').classList.toggle('on',!!on);
@@ -433,35 +503,52 @@ function cancelPoly(){ poly=null; hoverPt=null; setMode('sel'); }
 $('drawFinish').onclick=finishPoly; $('drawCancel').onclick=cancelPoly;
 $('drawUndo').onclick=()=>{ if(poly&&poly.length){ poly.pop(); updateDrawbar(); draw2d(); } };
 $('mOutline').onclick=()=>setMode('outline'); $('mWall').onclick=()=>setMode('wall'); $('mWin').onclick=()=>setMode('win');
-$('mDoor').onclick=()=>setMode('door'); $('mStair').onclick=()=>setMode('stair'); $('mVoid').onclick=()=>setMode('void'); $('mSel').onclick=()=>setMode('sel');
+$('mDoor').onclick=()=>setMode('door'); $('mStair').onclick=()=>setMode('stair'); $('mVoid').onclick=()=>setMode('void');
+$('mRoof').onclick=()=>setMode('roof'); $('mSel').onclick=()=>setMode('sel');
 
 function renderTabs(){ const el=$('floorTabs'); el.innerHTML='';
-  spec.floors.forEach((f,i)=>{ const b=document.createElement('button'); b.className='tab'+(i===cur?' on':''); b.textContent='F'+(i+1);
-    b.onclick=()=>{cur=i; sel=null; poly=null; $('fh').value=F().h; draw2d(); syncProps(); renderTabs();}; el.appendChild(b); }); }
+  spec.floors.forEach((f,i)=>{ const b=document.createElement('button'); b.className='tab'+((!showRoof&&i===cur)?' on':''); b.textContent='F'+(i+1);
+    b.onclick=()=>{cur=i; showRoof=false; sel=null; poly=null; $('fh').textContent=F().h; renderTabs(); draw2d(); syncProps(); rebuild();};   // 3D peels open to this floor
+    el.appendChild(b); });
+  const rb=document.createElement('button'); rb.className='tab'+(showRoof?' on':''); rb.textContent='Roof';   // whole house w/ roof
+  rb.onclick=()=>{ showRoof=true; renderTabs(); rebuild(); }; el.appendChild(rb);
+  const df=$('delFloor'); df.textContent='🗑 F'+(cur+1); df.title='Delete the selected floor (F'+(cur+1)+')'; }   // show which floor delete targets
 $('addFloor').onclick=()=>{ const below=F(); spec.floors.splice(cur+1,0,{outline:below.outline.map(p=>p.slice()),h:10,walls:[],openings:[],mats:{}});
-  cur++; sel=null; $('fh').value=10; renderTabs(); rebuild(); };
-$('delFloor').onclick=()=>{ if(spec.floors.length<=1) return; spec.floors.splice(cur,1);
+  cur++; sel=null; $('fh').textContent=10; renderTabs(); rebuild(); };
+$('delFloor').onclick=()=>{ if(spec.floors.length<=1){ alert('Only one floor left — nothing to delete.'); return; }
+  if(!confirm('Delete Floor '+(cur+1)+'? This removes that entire floor (and any stairs on it). Can\'t be undone.')) return;
+  spec.floors.splice(cur,1);
   spec.stairs=spec.stairs.filter(s=>(s.floor||0)!==cur).map(s=>({...s,floor:(s.floor||0)>cur?s.floor-1:s.floor}));
-  cur=Math.max(0,cur-1); sel=null; $('fh').value=F().h; renderTabs(); rebuild(); };
-$('fh').oninput=e=>{ F().h=Math.max(7,+e.target.value||10); rebuild(); };
-$('roofStyle').onchange=e=>{ spec.roof.style=e.target.value; rebuild(); };
-$('roofPitch').oninput=e=>{ spec.roof.pitch=+e.target.value; rebuild(); };
-$('noRoof').onchange=rebuild;
+  cur=Math.max(0,cur-1); sel=null; $('fh').textContent=F().h; renderTabs(); rebuild(); };
+function setFh(dv){ F().h=Math.max(7,Math.min(30,Math.round(((F().h||10)+dv)*10)/10)); $('fh').textContent=F().h; rebuild(); }
+$('fhd').onclick=()=>setFh(-0.5); $('fhu').onclick=()=>setFh(0.5);
+$('winFrames').onchange=e=>{ spec.windowFrames=e.target.checked; rebuild(); };
 
+TEX_LIST.forEach(t=>{ const o=document.createElement('option'); o.value=t.id; o.textContent=t.name; $('swTex').appendChild(o); }); // texture dropdown
 function renderPalette(){ const el=$('palette'); el.innerHTML='';
   spec.palette.forEach((c,i)=>{ const d=document.createElement('div'); d.className='sw'+(i===activeMat?' on':''); d.style.background=c;
-    d.onclick=()=>{ activeMat=(activeMat===i?null:i); $('swEdit').value=spec.palette[i]; renderPalette(); $('paintHint').style.display=activeMat!=null?'block':'none'; }; el.appendChild(d); }); }
+    const tx=spec.palTex[i]; if(tx){ d.style.backgroundImage='url('+texThumb(tx,40)+')'; d.style.backgroundSize='cover'; d.style.backgroundBlendMode='multiply'; } // tinted texture preview
+    d.onclick=()=>{ activeMat=(activeMat===i?null:i); $('swEdit').value=spec.palette[i]; $('swTex').value=spec.palTex[i]||''; renderPalette(); $('paintHint').style.display=activeMat!=null?'block':'none'; }; el.appendChild(d); }); }
 $('swEdit').oninput=e=>{ if(activeMat==null) return; spec.palette[activeMat]=e.target.value; renderPalette(); rebuild(); };
+$('swTex').onchange=e=>{ if(activeMat==null) return; spec.palTex[activeMat]=e.target.value; renderPalette(); rebuild(); };
 
+// ---- +/- stepper rows: touch-friendly, no typing so a value can never be blanked out ----
+function stepRow(id,label,val,unit){ return '<div style="display:flex;align-items:center;gap:8px;margin:6px 0">'+
+  '<span style="flex:1;font-size:13px">'+label+'</span>'+
+  '<button id="'+id+'d" style="width:44px;height:40px;font-size:22px;line-height:1">−</button>'+
+  '<span id="'+id+'v" style="min-width:60px;text-align:center;font-variant-numeric:tabular-nums">'+(Math.round(val*100)/100)+(unit||'')+'</span>'+
+  '<button id="'+id+'u" style="width:44px;height:40px;font-size:22px;line-height:1">＋</button></div>'; }
+function wireStep(id,val,step,min,max,apply){ const cl=v=>Math.max(min,Math.min(max,Math.round(v*1000)/1000));
+  $(id+'d').onclick=()=>apply(cl(val-step)); $(id+'u').onclick=()=>apply(cl(val+step)); }
 function syncProps(){ refreshCoord(); const el=$('props'), f=F(); if(!sel){ el.innerHTML='<small>Nothing selected. Draw the outline (⬠), then partitions (│). Window/Door/Stairs tools add by tapping. ⬚ Open cuts a hole in this floor (open-to-below / high ceilings). Select a top-floor wall to flip it into a dormer.</small>'; return; }
   if(sel.kind==='outline'){ el.innerHTML='<small>Footprint of Floor '+(cur+1)+' (the foundation). Drag the corner dots to reshape it (L-shapes, bays). Drag empty space to pan the view.</small>'+
     '<button id="paddc" class="wide">＋ add corner</button>';
     $('paddc').onclick=addCornerLongest; }
   else if(sel.kind==='vertex'){ const p=f.outline[sel.idx]; el.innerHTML=
-    '<label>E (east) <input id="vx" type="number" step="0.5" value="'+p[0]+'"></label><label>N (north) <input id="vz" type="number" step="0.5" value="'+(-p[1])+'"></label>'+
+    stepRow('vx','E (east)',p[0],' ft')+stepRow('vz','N (north)',-p[1],' ft')+
     '<button id="paddc" class="wide">＋ add corner after this</button>'+
     '<button id="pdel" class="wide">🗑 delete corner</button>';
-    $('vx').oninput=e=>{p[0]=+e.target.value;rebuild();}; $('vz').oninput=e=>{p[1]=-(+e.target.value);rebuild();};
+    wireStep('vx',p[0],0.5,-999,999,v=>{ const c=outlineCenters(f); p[0]=v; reprojectOpenings(f,c); rebuild(); }); wireStep('vz',-p[1],0.5,-999,999,v=>{ const c=outlineCenters(f); p[1]=-v; reprojectOpenings(f,c); rebuild(); });
     $('paddc').onclick=()=>insertCornerAfter(sel.idx);
     $('pdel').onclick=()=>{ if(f.outline.length<=3)return; const c=outlineCenters(f); f.outline.splice(sel.idx,1); reanchor(f,c); sel=null; rebuild(); }; }
   else if(sel.kind==='void'){ el.innerHTML='<small>Open-to-below cutout on Floor '+(cur+1)+' — the slab is removed here so the space is open to the floor below (double-height). Drag its dots to reshape.</small>'+
@@ -470,10 +557,10 @@ function syncProps(){ refreshCoord(); const el=$('props'), f=F(); if(!sel){ el.i
     $('paddc').onclick=()=>addVoidCornerLongest(sel.idx);
     $('pdel').onclick=()=>{ f.voids.splice(sel.idx,1); sel=null; rebuild(); }; }
   else if(sel.kind==='voidvtx'){ const p=f.voids[sel.vi][sel.pi]; el.innerHTML=
-    '<label>E (east) <input id="vx" type="number" step="0.5" value="'+p[0]+'"></label><label>N (north) <input id="vz" type="number" step="0.5" value="'+(-p[1])+'"></label>'+
+    stepRow('vx','E (east)',p[0],' ft')+stepRow('vz','N (north)',-p[1],' ft')+
     '<button id="paddc" class="wide">＋ add corner after this</button>'+
     '<button id="pdel" class="wide">🗑 delete corner</button>';
-    $('vx').oninput=e=>{p[0]=+e.target.value;rebuild();}; $('vz').oninput=e=>{p[1]=-(+e.target.value);rebuild();};
+    wireStep('vx',p[0],0.5,-999,999,v=>{p[0]=v;rebuild();}); wireStep('vz',-p[1],0.5,-999,999,v=>{p[1]=-v;rebuild();});
     $('paddc').onclick=()=>insertVoidCorner(sel.vi,sel.pi);
     $('pdel').onclick=()=>{ const v=f.voids[sel.vi]; if(v.length<=3){ f.voids.splice(sel.vi,1); } else { v.splice(sel.pi,1); } sel=null; rebuild(); }; }
   else if(sel.kind==='wall'){ const w=f.walls[sel.idx];
@@ -482,24 +569,38 @@ function syncProps(){ refreshCoord(); const el=$('props'), f=F(); if(!sel){ el.i
       '<button id="pdel" class="wide">🗑 delete wall</button>';
     if(isTopFloor()) $('pdorm').onchange=e=>{ w.dormer=e.target.checked; rebuild(); };
     $('pdel').onclick=()=>{ f.walls.splice(sel.idx,1); f.openings=f.openings.filter(o=>!(o.on==='wall'&&o.wi===sel.idx)).map(o=>{ if(o.on==='wall'&&o.wi>sel.idx)o.wi--; return o;}); sel=null; rebuild(); }; }
-  else if(sel.kind==='opening'){ const o=f.openings[sel.idx]; el.innerHTML=
+  else if(sel.kind==='opening'){ const o=f.openings[sel.idx]; const slideMax=Math.max(0.1,openLen(f,o)-o.w); el.innerHTML=
     '<label>type <select id="ptype"><option value="window"'+(o.type==='window'?' selected':'')+'>window</option><option value="door"'+(o.type==='door'?' selected':'')+'>door</option></select></label>'+
-    '<label>width (ft) <input id="pow" type="range" min="2" max="12" step="0.5" value="'+o.w+'"></label>'+
-    '<label>sill (ft) <input id="poy0" type="number" min="0" max="12" step="0.5" value="'+o.y0+'"></label>'+
-    '<label>head (ft) <input id="poy1" type="number" min="4" max="16" step="0.5" value="'+o.y1+'"></label>'+
-    '<label>slide <input id="poff" type="range" min="0" max="1" step="0.01" value="'+((o.off/Math.max(0.1,openLen(f,o)-o.w))||0)+'"></label>'+
+    stepRow('pow','width',o.w,' ft')+stepRow('poy0','sill',o.y0,' ft')+stepRow('poy1','head',o.y1,' ft')+stepRow('poff','slide L↔R',(o.off/slideMax)||0,'')+
     '<button id="pdel" class="wide">🗑 delete</button>';
-    $('ptype').onchange=e=>{o.type=e.target.value;rebuild();}; $('pow').oninput=e=>{o.w=+e.target.value;rebuild();};
-    $('poy0').oninput=e=>{o.y0=+e.target.value;rebuild();}; $('poy1').oninput=e=>{o.y1=+e.target.value;rebuild();};
-    $('poff').oninput=e=>{o.off=+e.target.value*Math.max(0,openLen(f,o)-o.w);rebuild();};
+    $('ptype').onchange=e=>{o.type=e.target.value;rebuild();};
+    wireStep('pow',o.w,0.5,1,20,v=>{o.w=v;rebuild();});
+    wireStep('poy0',o.y0,0.5,0,20,v=>{o.y0=v;rebuild();});
+    wireStep('poy1',o.y1,0.5,1,24,v=>{o.y1=v;rebuild();});
+    wireStep('poff',(o.off/slideMax)||0,0.05,0,1,v=>{o.off=v*slideMax;rebuild();});
     $('pdel').onclick=()=>{f.openings.splice(sel.idx,1);sel=null;rebuild();}; }
   else if(sel.kind==='stair'){ const st=spec.stairs[sel.idx]; el.innerHTML=
     '<label>facing <select id="psd"><option '+(st.dir==='N'?'selected':'')+'>N</option><option '+(st.dir==='S'?'selected':'')+'>S</option><option '+(st.dir==='E'?'selected':'')+'>E</option><option '+(st.dir==='W'?'selected':'')+'>W</option></select></label>'+
-    '<label>run (ft) <input id="psrun" type="range" min="6" max="20" step="0.5" value="'+(st.run||10)+'"></label>'+
-    '<label>width (ft) <input id="psw" type="range" min="2.5" max="6" step="0.25" value="'+(st.w||3)+'"></label>'+
+    stepRow('psrun','run',st.run||10,' ft')+stepRow('psw','width',st.w||3,' ft')+
     '<small>Rises Floor '+((st.floor||0)+1)+'→'+((st.floor||0)+2)+'; cuts a stairwell hole above.</small><button id="pdel" class="wide">🗑 delete stairs</button>';
-    $('psd').onchange=e=>{st.dir=e.target.value;rebuild();}; $('psrun').oninput=e=>{st.run=+e.target.value;rebuild();};
-    $('psw').oninput=e=>{st.w=+e.target.value;rebuild();}; $('pdel').onclick=()=>{spec.stairs.splice(sel.idx,1);sel=null;rebuild();}; }
+    $('psd').onchange=e=>{st.dir=e.target.value;rebuild();};
+    wireStep('psrun',st.run||10,0.5,4,30,v=>{st.run=v;rebuild();}); wireStep('psw',st.w||3,0.25,2,8,v=>{st.w=v;rebuild();});
+    $('pdel').onclick=()=>{spec.stairs.splice(sel.idx,1);sel=null;rebuild();}; }
+  else if(sel.kind==='roof'){ const rp=spec.roofPieces[sel.idx]; el.innerHTML=
+    '<small>Roof piece — drag its yellow corner dots in the plan to size it and line it up with the walls below. Sits at the base height.</small>'+
+    '<label>style <select id="rps"><option value="gable">gable</option><option value="hip">hip</option><option value="shed">shed</option><option value="flat">flat</option></select></label>'+
+    stepRow('rpb','base height',rp.base||0,' ft')+stepRow('rpp','pitch',rp.pitch??0.5,'')+stepRow('rpw','width',rp.w,' ft')+stepRow('rpd','depth',rp.d,' ft')+
+    '<button id="rpflip" class="wide">⇄ flip ridge direction</button>'+
+    '<label>raise walls under it <input id="rpraise" type="checkbox"'+(rp.raiseWalls?' checked':'')+'></label>'+
+    '<button id="pdel" class="wide">🗑 delete roof piece</button>';
+    $('rps').value=rp.style||'gable'; $('rps').onchange=e=>{rp.style=e.target.value;rebuild();};
+    wireStep('rpb',rp.base||0,1,0,80,v=>{rp.base=v;rebuild();});
+    wireStep('rpp',rp.pitch??0.5,0.05,0.1,1.2,v=>{rp.pitch=v;rebuild();});
+    wireStep('rpw',rp.w,1,2,400,v=>{rp.w=Math.max(2,v);rebuild();});
+    wireStep('rpd',rp.d,1,2,400,v=>{rp.d=Math.max(2,v);rebuild();});
+    $('rpflip').onclick=()=>{ rp.flipRidge=!rp.flipRidge; rebuild(); };
+    $('rpraise').onchange=e=>{ rp.raiseWalls=e.target.checked; rebuild(); };
+    $('pdel').onclick=()=>{ spec.roofPieces.splice(sel.idx,1); sel=null; rebuild(); }; }
 }
 addEventListener('keydown',e=>{ if(isPolyMode(mode)&&e.key==='Enter'){ finishPoly(); return; }
   if(e.key==='Escape'&&poly){ cancelPoly(); return; }
@@ -512,19 +613,26 @@ addEventListener('keydown',e=>{ if(isPolyMode(mode)&&e.key==='Enter'){ finishPol
 addEventListener('keyup',e=>{ const k=e.key.toLowerCase(); if(k==='w')mv.fwd=0; if(k==='s')mv.back=0; if(k==='a')mv.left=0; if(k==='d')mv.right=0; if(k==='q')mv.down=0; if(k==='e')mv.up=0; });
 
 // ---------- save / load ----------
-function cleanSpec(){ return { floors:spec.floors.map(f=>({outline:f.outline,h:f.h,walls:f.walls,openings:f.openings,mats:f.mats,matsIn:f.matsIn,voids:f.voids})),
-  roof:spec.roof, stairs:spec.stairs, palette:spec.palette, colors:spec.colors }; }
+function cleanSpec(){ return { floors:spec.floors.map(f=>({outline:f.outline,h:f.h,walls:f.walls,openings:f.openings,mats:f.mats,matsIn:f.matsIn,voids:f.voids,floorMat:f.floorMat})),
+  roof:spec.roof, roofPieces:spec.roofPieces, stairs:spec.stairs, palette:spec.palette, palTex:spec.palTex, colors:spec.colors, windowFrames:spec.windowFrames }; }
 $('save').onclick=()=>{ const out=JSON.stringify(cleanSpec()); localStorage.setItem(KEY_SCENE,out); localStorage.setItem(KEY_DRAFT,out); const b=$('save'); b.textContent='✓ Saved — reload the scene'; setTimeout(()=>b.textContent='💾 Save to Scene',1800); };
-$('copy').onclick=()=>{ const t=JSON.stringify(cleanSpec()); $('dump').value=t; try{navigator.clipboard.writeText(t);}catch(e){} };
-$('export').onclick=()=>{ const name=(prompt('Name this structure — the file will be <name>.json','montana-home')||'').trim(); if(!name) return;
-  const fname=name.replace(/[^\w.-]+/g,'_')+'.json'; const t=JSON.stringify(cleanSpec());
-  $('dump').value=t;                                             // phone-safe fallback: text is always here to copy
-  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([t],{type:'application/json'})); a.download=fname;
-  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
-  const b=$('export'); b.textContent='⬇ '+fname; setTimeout(()=>b.textContent='⬇ Export .json file',2000); };
+const _round2=(k,v)=> (typeof v==='number'&&isFinite(v)) ? Math.round(v*100)/100 : v;   // trim exported floats to 2 decimals
+$('copy').onclick=()=>{ const t=JSON.stringify(cleanSpec(),_round2); $('dump').value=t; try{navigator.clipboard.writeText(t);}catch(e){} };
+$('build').onclick=()=>{ const t=$('dump').value.trim(); const b=$('build');
+  if(!t){ b.textContent='✗ box is empty'; setTimeout(()=>b.textContent='▶ Build from box',1600); return; }
+  try{ const parsed=JSON.parse(t); spec=migrate(parsed); cur=0; sel=null; poly=null; init(); persist(); }  // build it + make it the working draft
+  catch(e){ b.textContent='✗ '+(String(e.message||e).slice(0,22)); setTimeout(()=>b.textContent='▶ Build from box',2200); return; }
+  b.textContent='✓ built'; setTimeout(()=>b.textContent='▶ Build from box',1500); };
 $('load').onclick=()=>{ spec=migrate(JSON.parse(localStorage.getItem(KEY_SCENE)||'null')); cur=0; sel=null; poly=null; init(); };
+$('loadFile').onclick=async()=>{ const b=$('loadFile');                        // pull the latest design I staged as ./montana-home.json
+  try{ const j=await (await fetch('./montana-home.json?t='+Date.now())).json();
+    $('dump').value=JSON.stringify(j); spec=migrate(j); cur=0; sel=null; poly=null; init(); persist();
+    b.textContent='✓ loaded latest'; }
+  catch(e){ b.textContent='✗ '+String(e.message||e).slice(0,18); }
+  setTimeout(()=>b.textContent='⤓ Load latest (staged file)',1800); };
 
-function init(){ $('fh').value=F().h; $('roofStyle').value=spec.roof.style||'gable'; $('roofPitch').value=spec.roof.pitch??0.5;
+function init(){ $('fh').textContent=F().h;
+  $('winFrames').checked=!!spec.windowFrames;
   renderTabs(); renderPalette(); setMode('sel'); rebuild(); }
 new ResizeObserver(()=>{planResize();resize();}).observe(document.getElementById('mid'));
 planResize(); resize(); init();
